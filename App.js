@@ -123,6 +123,7 @@ export default function App() {
   const [people, setPeople] = useState([]);
   const [checkinSummary, setCheckinSummary] = useState([]);
   const [cloudNotice, setCloudNotice] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
   const [screen, setScreen] = useState('home');
   const [exchangeInfo, setExchangeInfo] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -134,6 +135,7 @@ export default function App() {
     nickname: isCloudConfigured ? '교환학생' : '보빈',
     homeUniversity: '국민대학교',
     showHomeUniversity: false,
+    discoverable: false,
     intro: '여행, 카페, 맛집 좋아해요. 같이 돌아다닐 친구를 찾고 있어요.',
     interests: ['여행', '카페', '맛집'],
     style: ['계획형', '주말여행 자주'],
@@ -165,7 +167,7 @@ export default function App() {
       if (!active) return;
       setProfile(account.profile || {
         nickname: '교환학생', homeUniversity: '', showHomeUniversity: false,
-        discoverable: true, intro: '', interests: [], style: [],
+        discoverable: false, intro: '', interests: [], style: [],
       });
       setExchangeInfo(account.exchangeInfo);
       setChecklist(INITIAL_CHECKLIST.map((item) => ({ ...item, done: Boolean(account.checks[item.id]) })));
@@ -175,15 +177,15 @@ export default function App() {
       if (active) setCloudNotice(friendlyError(e));
     }).finally(() => { if (active) setCloudLoading(false); });
     return () => { active = false; };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, reloadToken]);
 
   useEffect(() => {
     if (!supabase || !session?.user?.id || !exchangeInfo) { setPeople([]); return; }
     let active = true;
     loadPeople(exchangeInfo).then((users) => { if (active) setPeople(users); })
-      .catch((e) => { if (active) setCloudNotice(friendlyError(e)); });
+      .catch((e) => { if (active) Alert.alert('사람찾기 오류', friendlyError(e)); });
     return () => { active = false; };
-  }, [session?.user?.id, exchangeInfo?.universityId, exchangeInfo?.semester, exchangeInfo?.countryCode]);
+  }, [session?.user?.id, exchangeInfo?.universityId, exchangeInfo?.semester, exchangeInfo?.countryCode, reloadToken]);
 
   useEffect(() => {
     if (!supabase || !session?.user?.id || !exchangeInfo) {
@@ -196,12 +198,27 @@ export default function App() {
         const answer = await loadCheckin(exchangeInfo, session.user.id);
         const summary = answer ? await getCheckinSummary(exchangeInfo) : [];
         if (active) { setCheckinAnswer(answer); setCheckinSummary(summary); }
-      } catch (e) { if (active) setCloudNotice(friendlyError(e)); }
+      } catch (e) { if (active) Alert.alert('체크인 오류', friendlyError(e)); }
     })();
     return () => { active = false; };
   }, [session?.user?.id, exchangeInfo?.universityId, exchangeInfo?.semester, exchangeInfo?.city]);
 
   const goHome = () => setScreen('home');
+
+  async function refreshCommunity() {
+    if (!supabase) return;
+    try { setPosts(await loadPosts()); } catch (e) { Alert.alert('새로고침 실패', friendlyError(e)); }
+  }
+
+  async function refreshPeople() {
+    if (!supabase || !exchangeInfo) return;
+    try { setPeople(await loadPeople(exchangeInfo)); } catch (e) { Alert.alert('새로고침 실패', friendlyError(e)); }
+  }
+
+  async function refreshCheckin() {
+    if (!supabase || !checkinAnswer) return;
+    try { setCheckinSummary(await getCheckinSummary(exchangeInfo)); } catch (e) { Alert.alert('새로고침 실패', friendlyError(e)); }
+  }
 
   async function submitExchange(info) {
     if (supabase) {
@@ -299,20 +316,20 @@ export default function App() {
     return <Screen><View style={styles.emptyState}><ActivityIndicator color={COLORS.green} /><Text style={styles.emptyBody}>내 교환 정보를 불러오는 중...</Text></View></Screen>;
   }
   if (isCloudConfigured && cloudNotice) {
-    return <Screen><View style={styles.emptyState}><Text style={styles.emptyTitle}>서버 설정을 확인해 주세요</Text><Text style={styles.emptyBody}>{cloudNotice}</Text><PrimaryButton label="다시 불러오기" onPress={() => { setCloudNotice(''); supabase.auth.refreshSession(); }} /></View></Screen>;
+    return <Screen><View style={styles.emptyState}><Text style={styles.emptyTitle}>서버 설정을 확인해 주세요</Text><Text style={styles.emptyBody}>{cloudNotice}</Text><PrimaryButton label="다시 불러오기" onPress={() => { setCloudNotice(''); setReloadToken((v) => v + 1); }} /></View></Screen>;
   }
 
   if (screen === 'register') {
     return <ExchangeRegistrationScreen initialValue={exchangeInfo} onCancel={goHome} onSave={submitExchange} />;
   }
   if (screen === 'find') {
-    return <FindStudentsScreen exchangeInfo={exchangeInfo} onBack={goHome} onRegister={() => setScreen('register')} users={isCloudConfigured ? people : SAMPLE_USERS} preview={!isCloudConfigured} onOpenProfile={(user) => { setSelectedUser(user); setScreen('profile'); }} />;
+    return <FindStudentsScreen exchangeInfo={exchangeInfo} onBack={goHome} onRegister={() => setScreen('register')} users={isCloudConfigured ? people : SAMPLE_USERS} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshPeople : null} onOpenProfile={(user) => { setSelectedUser(user); setScreen('profile'); }} />;
   }
   if (screen === 'profile' && selectedUser) {
     return <StudentProfileScreen user={selectedUser} onBack={() => setScreen('find')} />;
   }
   if (screen === 'community') {
-    return <CommunityScreen posts={posts} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => { setSelectedPostId(id); setScreen('postDetail'); }} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
+    return <CommunityScreen posts={posts} onRefresh={isCloudConfigured ? refreshCommunity : null} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => { setSelectedPostId(id); setScreen('postDetail'); }} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
   }
   if (screen === 'writePost') {
     return <WritePostScreen onCancel={() => setScreen('community')} onSubmit={submitPost} />;
@@ -322,7 +339,7 @@ export default function App() {
     return <PostDetailScreen post={post} onBack={() => setScreen('community')} onAddComment={submitComment} />;
   }
   if (screen === 'checkin') {
-    return <CheckInScreen exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={submitCheckin} responses={isCloudConfigured ? checkinSummary : CHECKIN_RESPONSES} preview={!isCloudConfigured} onBack={goHome} />;
+    return <CheckInScreen exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={submitCheckin} responses={isCloudConfigured ? checkinSummary : CHECKIN_RESPONSES} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshCheckin : null} onBack={goHome} />;
   }
   if (screen === 'checklist') {
     return <ChecklistScreen items={checklist} onBack={goHome} onToggle={toggleCheck} />;
@@ -438,7 +455,7 @@ function WheelPicker({ items, value, onChange, formatItem }) {
   );
 }
 
-function FindStudentsScreen({ exchangeInfo, users, preview, onBack, onRegister, onOpenProfile }) {
+function FindStudentsScreen({ exchangeInfo, users, preview, onRefresh, onBack, onRegister, onOpenProfile }) {
   const [filter, setFilter] = useState('same');
   if (!exchangeInfo) return <Screen><TopHeader title="교환학생 찾기" onBack={onBack} /><View style={styles.emptyState}><Text style={styles.emptyTitle}>먼저 파견 정보를 등록해 주세요</Text><Text style={styles.emptyBody}>대학과 학기를 등록하면 같은 파견지의 사람부터 주변 교환학생까지 찾을 수 있어요.</Text><PrimaryButton label="파견 정보 등록하기" onPress={onRegister} /></View></Screen>;
 
@@ -479,7 +496,7 @@ function FindStudentsScreen({ exchangeInfo, users, preview, onBack, onRegister, 
         {groups.same.length < 3 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>같은 학교 사람을 더 찾아볼까요?</Text><Text style={styles.noticeBody}>도시·근처 대학·같은 국가로 범위를 넓혀 보세요.</Text></View>}
         {filter === 'nearby' && exchangeInfo.latitude == null && !preview &&
           <View style={styles.noticeBox}><Text style={styles.noticeTitle}>거리 정보를 계산할 수 없어요</Text><Text style={styles.noticeBody}>파견 정보에서 대학을 다시 검색·선택하면 대학 좌표가 저장돼요. 휴대폰 위치는 사용하지 않아요.</Text></View>}
-        <Text style={styles.resultCount}>{visibleUsers.length}명 찾았어요</Text>
+        <View style={styles.sectionRow}><Text style={styles.resultCount}>{visibleUsers.length}명 찾았어요</Text>{onRefresh && <TouchableOpacity onPress={onRefresh}><Text style={styles.moreText}>새로고침</Text></TouchableOpacity>}</View>
         {visibleUsers.map((user) => <StudentCard key={user.id} user={user} reason={getMatchReason(user, exchangeInfo)} onPress={() => onOpenProfile(user)} />)}
         {visibleUsers.length === 0 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>아직 조건에 맞는 사람이 없어요</Text><Text style={styles.noticeBody}>다른 범위로 검색해 보세요. 실제 사용자가 가입하면 이 목록에 나타나요.</Text></View>}
         <Text style={styles.prototypeNote}>사람찾기는 사용자가 공개를 허용한 정보만 보여줘요. 익명 게시글 작성자는 공개되지 않습니다.</Text>
@@ -531,14 +548,14 @@ function StudentProfileScreen({ user, onBack }) {
   );
 }
 
-function CommunityScreen({ posts, onHome, onWrite, onOpen, onMy, onFind }) {
+function CommunityScreen({ posts, onRefresh, onHome, onWrite, onOpen, onMy, onFind }) {
   const [category, setCategory] = useState('전체');
   const categories = ['전체', '질문', '생활', '수업', '여행메이트'];
   const visible = category === '전체' ? posts : posts.filter((post) => post.category === category);
   return (
     <Screen>
       <View style={styles.communityHeader}><View><Text style={styles.miniBrand}>교환점</Text><Text style={styles.pageTitle}>익명 커뮤니티</Text></View><TouchableOpacity style={styles.writeButton} onPress={onWrite}><Text style={styles.writeButtonText}>글쓰기</Text></TouchableOpacity></View>
-      <ScrollView contentContainerStyle={styles.communityContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.communityContent} showsVerticalScrollIndicator={false}>{onRefresh && <TouchableOpacity onPress={onRefresh}><Text style={[styles.moreText, { marginBottom: 12 }]}>↻ 새 게시글 불러오기</Text></TouchableOpacity>}
         <View style={styles.anonymousBanner}><Text style={styles.anonymousTitle}>닉네임 없이 질문하고 답해요</Text><Text style={styles.anonymousBody}>게시글에는 사람찾기 프로필을 표시하지 않아요. 서비스 운영상 작성자 확인 기록은 별도로 관리돼요.</Text></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>{categories.map((item) => <TouchableOpacity key={item} onPress={() => setCategory(item)} style={[styles.filterChip, category === item && styles.filterChipActive]}><Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text></TouchableOpacity>)}</ScrollView>
         {visible.map((post) => <TouchableOpacity key={post.id} style={styles.communityPost} onPress={() => onOpen(post.id)}>
@@ -580,7 +597,7 @@ function PostDetailScreen({ post, onBack, onAddComment }) {
   );
 }
 
-function CheckInScreen({ exchangeInfo, answer, responses = [], preview = false, onAnswer, onBack }) {
+function CheckInScreen({ exchangeInfo, answer, responses = [], preview = false, onRefresh, onAnswer, onBack }) {
   const [draft, setDraft] = useState(answer);
   const [sending, setSending] = useState(false);
   const revealed = Boolean(answer);
@@ -604,7 +621,7 @@ function CheckInScreen({ exchangeInfo, answer, responses = [], preview = false, 
         <PrimaryButton disabled={!draft.trim() || !exchangeInfo || sending} label={sending ? '저장하는 중...' : '답변하고 다른 사람 답 보기'} onPress={submit} />
       </> : <>
         <View style={styles.myAnswer}><Text style={styles.myAnswerLabel}>내 답변</Text><Text style={styles.myAnswerText}>{answer}</Text></View>
-        <Text style={styles.sectionTitle}>다른 사람들의 답변</Text>
+        <View style={styles.sectionRow}><Text style={styles.sectionTitle}>다른 사람들의 답변</Text>{onRefresh && <TouchableOpacity onPress={onRefresh}><Text style={styles.moreText}>새로고침</Text></TouchableOpacity>}</View>
         {responses.length === 0 && <Text style={styles.emptyBody}>아직 집계된 답변이 없어요.</Text>}
         {responses.map((item) => <View key={item.answer} style={styles.answerRow}>
           <Text style={styles.answerLabel}>{item.answer}</Text>
@@ -641,7 +658,7 @@ function MyScreen({ profile, exchangeInfo, onSave, onSignOut, onBack, onEditExch
         <Field label="관심사 (쉼표로 구분)"><TextInput style={styles.input} value={draft.interestsText} onChangeText={(v) => setDraft({ ...draft, interestsText: v })} /></Field>
         <Field label="여행/생활 스타일 (쉼표로 구분)"><TextInput style={styles.input} value={draft.styleText} onChangeText={(v) => setDraft({ ...draft, styleText: v })} /></Field>
       </View>
-      <View style={styles.mySection}><Text style={styles.profileSectionTitle}>사람찾기 참여 설정</Text><TouchableOpacity style={styles.toggleRow} onPress={() => setDraft({ ...draft, discoverable: draft.discoverable === false })}><Text style={styles.toggleLabel}>다른 학생에게 내 프로필 공개</Text><View style={[styles.toggle, draft.discoverable !== false && styles.toggleOn]}><View style={[styles.toggleDot, draft.discoverable !== false && styles.toggleDotOn]} /></View></TouchableOpacity></View>
+      <View style={styles.mySection}><Text style={styles.profileSectionTitle}>사람찾기 참여 설정</Text><Text style={styles.helperText}>기본은 비공개예요. 직접 켜야 다른 사람의 검색 결과에 나타나요.</Text><TouchableOpacity style={styles.toggleRow} onPress={() => setDraft({ ...draft, discoverable: draft.discoverable === false })}><Text style={styles.toggleLabel}>다른 학생에게 내 프로필 공개</Text><View style={[styles.toggle, draft.discoverable !== false && styles.toggleOn]}><View style={[styles.toggleDot, draft.discoverable !== false && styles.toggleDotOn]} /></View></TouchableOpacity></View>
        <View style={styles.mySection}><Text style={styles.profileSectionTitle}>한국 대학 공개</Text><TextInput style={styles.input} value={draft.homeUniversity} onChangeText={(v) => setDraft({ ...draft, homeUniversity: v })} placeholder="한국 소속 대학" placeholderTextColor="#A1A7A2" />
         <TouchableOpacity style={styles.toggleRow} onPress={() => setDraft({ ...draft, showHomeUniversity: !draft.showHomeUniversity })}><Text style={styles.toggleLabel}>사람찾기에서 한국 대학 공개</Text><View style={[styles.toggle, draft.showHomeUniversity && styles.toggleOn]}><View style={[styles.toggleDot, draft.showHomeUniversity && styles.toggleDotOn]} /></View></TouchableOpacity>
       </View>
