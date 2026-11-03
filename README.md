@@ -97,5 +97,13 @@ Expo Go QR 접속에 서로 다른 와이파이를 쓰면 --tunnel 사용.
 - 최초 DB 마이그레이션 적용 성공
 - 공용 테이블 6개에 RLS 활성화·RLS 정책 14개
 - private 작성자 테이블 2개는 일반 로그인 사용자/비로그인 사용자에게 SCHEMA USAGE 및 SELECT 권한이 없는 것을 쿼리로 확인함
-- **남은 보안 경고:** private 작성자 테이블에 RLS 미적용. 운영 공개 전 사용자의 승인 후 방어층 강화 필요
+- **해결 완료:** private 작성자 테이블 2개에 RLS 적용. 일반 사용자에게 스키마 접근/조회/삽입 권한 없음. 작성자 연결은 서버 소유 보안 함수에서만 처리
 - 실제 두 계정 회원가입/교차 테스트는 아직 미완료
+
+## 비공개 작성자 테이블 RLS 보완 (2026-11-04)
+
+- `private.post_authors`, `private.comment_authors` RLS 켜짐 (DB 실제 적용 및 재조회 완료)
+- `anon`, `authenticated` 역할의 private schema USAGE와 테이블 SELECT/INSERT 권한 없음 확인
+- 두 테이블에는 일반 사용자를 위한 정책을 추가하지 않음. 서버 소유의 `SECURITY DEFINER` 함수가 작성자 기록을 수행
+- DB advisor에는 `RLS enabled no policy` **INFO**와 의도적으로 호출 가능한 보안 RPC 함수 **WARN**이 남아 있음. 내부 관리자 함수의 접근 범위/오남용 방지 등을 공개 전 별도 검토해야 함
+- 실제 두 계정으로 로그인해 글쓰기·댓글쓰기 테스트는 아직 진행되지 않음
