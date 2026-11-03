@@ -9,7 +9,7 @@ create table if not exists public.people_profiles (
   nickname text not null default '교환학생' check (char_length(nickname) between 1 and 32),
   home_university text not null default '' check (char_length(home_university) <= 120),
   show_home_university boolean not null default false,
-  discoverable boolean not null default true,
+  discoverable boolean not null default false,
   intro text not null default '' check (char_length(intro) <= 300),
   interests text[] not null default '{}',
   travel_style text[] not null default '{}',
