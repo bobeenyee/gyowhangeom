@@ -38,6 +38,7 @@ const SAMPLE_USERS = [
     semester: '2027년 1학기',
     homeUniversity: '연세대학교',
     intro: '여행이랑 카페 좋아해요!',
+    interests: ['여행', '카페', '사진'],
   },
   {
     id: 'u2',
@@ -49,6 +50,7 @@ const SAMPLE_USERS = [
     semester: '2027년 1학기',
     homeUniversity: '고려대학교',
     intro: '코펜하겐 같이 돌아다닐 친구 구해요.',
+    interests: ['맛집', '산책', '여행메이트'],
   },
   {
     id: 'u3',
@@ -60,6 +62,7 @@ const SAMPLE_USERS = [
     semester: '2027년 2학기',
     homeUniversity: '성균관대학교',
     intro: '맛집 탐방 좋아합니다.',
+    interests: ['맛집', '요리', '전시'],
   },
   {
     id: 'u4',
@@ -71,6 +74,7 @@ const SAMPLE_USERS = [
     semester: '2027년 1학기',
     homeUniversity: '한양대학교',
     intro: '축구랑 여행 좋아해요.',
+    interests: ['축구', '여행', '러닝'],
   },
 ];
 
@@ -78,6 +82,7 @@ export default function App() {
   const [started, setStarted] = useState(false);
   const [screen, setScreen] = useState('home');
   const [exchangeInfo, setExchangeInfo] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   if (!started) {
     return (
@@ -114,8 +119,16 @@ export default function App() {
         exchangeInfo={exchangeInfo}
         onBack={() => setScreen('home')}
         onRegister={() => setScreen('register')}
+        onOpenProfile={(user) => {
+          setSelectedUser(user);
+          setScreen('profile');
+        }}
       />
     );
+  }
+
+  if (screen === 'profile' && selectedUser) {
+    return <StudentProfileScreen user={selectedUser} onBack={() => setScreen('find')} />;
   }
 
   return (
@@ -339,7 +352,7 @@ function WheelPicker({ items, value, onChange, formatItem }) {
   );
 }
 
-function FindStudentsScreen({ exchangeInfo, onBack, onRegister }) {
+function FindStudentsScreen({ exchangeInfo, onBack, onRegister, onOpenProfile }) {
   const [filter, setFilter] = useState('same');
 
   if (!exchangeInfo) {
@@ -408,7 +421,9 @@ function FindStudentsScreen({ exchangeInfo, onBack, onRegister }) {
             <Text style={styles.emptyBody}>회원 데이터가 쌓이면 여기에 실제 교환학생이 표시돼요.</Text>
           </View>
         ) : (
-          users.map((user) => <StudentCard key={user.id} user={user} />)
+          users.map((user) => (
+            <StudentCard key={user.id} user={user} onPress={() => onOpenProfile(user)} />
+          ))
         )}
 
         <Text style={styles.prototypeNote}>지금은 기능 테스트용 샘플 사용자예요. 다음 단계에서 실제 회원 DB와 연결할 거예요.</Text>
@@ -417,9 +432,9 @@ function FindStudentsScreen({ exchangeInfo, onBack, onRegister }) {
   );
 }
 
-function StudentCard({ user }) {
+function StudentCard({ user, onPress }) {
   return (
-    <TouchableOpacity activeOpacity={0.8} style={styles.studentCard}>
+    <TouchableOpacity activeOpacity={0.8} style={styles.studentCard} onPress={onPress}>
       <View style={styles.studentAvatar}><Text style={styles.studentAvatarText}>{user.name.slice(0, 1)}</Text></View>
       <View style={styles.studentInfo}>
         <Text style={styles.studentName}>{user.name}</Text>
@@ -429,6 +444,79 @@ function StudentCard({ user }) {
       </View>
       <Text style={styles.studentArrow}>›</Text>
     </TouchableOpacity>
+  );
+}
+
+function StudentProfileScreen({ user, onBack }) {
+  const [requested, setRequested] = useState(false);
+  const [messagePressed, setMessagePressed] = useState(false);
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.findHeader}>
+        <TouchableOpacity onPress={onBack}><Text style={styles.cancelText}>‹ 찾기</Text></TouchableOpacity>
+        <Text style={styles.formTitle}>프로필</Text>
+        <View style={{ width: 34 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.profileContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.profileHero}>
+          <View style={styles.profileAvatarLarge}>
+            <Text style={styles.profileAvatarLargeText}>{user.name.slice(0, 1)}</Text>
+          </View>
+          <Text style={styles.profileName}>{user.name}</Text>
+          <Text style={styles.profileHomeUniversity}>{user.homeUniversity}</Text>
+          <Text style={styles.profileIntro}>{user.intro}</Text>
+        </View>
+
+        <View style={styles.profileSection}>
+          <Text style={styles.profileSectionTitle}>교환 정보</Text>
+          <ProfileRow label="파견 대학" value={user.universityName} />
+          <ProfileRow label="파견 지역" value={[user.city, user.country].filter(Boolean).join(', ')} />
+          <ProfileRow label="파견 학기" value={user.semester} />
+        </View>
+
+        <View style={styles.profileSection}>
+          <Text style={styles.profileSectionTitle}>관심사</Text>
+          <View style={styles.interestWrap}>
+            {(user.interests || []).map((interest) => (
+              <View key={interest} style={styles.interestChip}>
+                <Text style={styles.interestChipText}>{interest}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.profileActionRow}>
+          <TouchableOpacity
+            style={[styles.profileActionButton, requested && styles.profileActionButtonDone]}
+            onPress={() => setRequested((value) => !value)}
+          >
+            <Text style={[styles.profileActionText, requested && styles.profileActionTextDone]}>
+              {requested ? '요청 보냄' : '친구추가'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.profileMessageButton}
+            onPress={() => setMessagePressed(true)}
+          >
+            <Text style={styles.profileMessageButtonText}>{messagePressed ? '채팅 준비 중' : '메시지'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.prototypeNote}>친구추가와 메시지는 지금 화면 동작만 테스트해요. 실제 계정·채팅 기능은 회원 DB 연결 후 붙일 거예요.</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function ProfileRow({ label, value }) {
+  return (
+    <View style={styles.profileRow}>
+      <Text style={styles.profileRowLabel}>{label}</Text>
+      <Text style={styles.profileRowValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -637,4 +725,26 @@ const styles = StyleSheet.create({
   emptyTitle: { color: COLORS.text, fontSize: 17, fontWeight: '800' },
   emptyBody: { color: COLORS.subtext, fontSize: 13, lineHeight: 20, marginTop: 8 },
   prototypeNote: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 10, textAlign: 'center' },
+  profileContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  profileHero: { alignItems: 'center', paddingVertical: 14, marginBottom: 12 },
+  profileAvatarLarge: { width: 84, height: 84, borderRadius: 42, backgroundColor: COLORS.greenSoft, alignItems: 'center', justifyContent: 'center' },
+  profileAvatarLargeText: { color: COLORS.greenDark, fontSize: 30, fontWeight: '800' },
+  profileName: { marginTop: 14, color: COLORS.text, fontSize: 24, fontWeight: '800' },
+  profileHomeUniversity: { marginTop: 4, color: COLORS.green, fontSize: 14, fontWeight: '700' },
+  profileIntro: { marginTop: 12, color: COLORS.text, fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  profileSection: { backgroundColor: COLORS.surface, borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: COLORS.line },
+  profileSectionTitle: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginBottom: 10 },
+  profileRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: COLORS.line },
+  profileRowLabel: { color: COLORS.subtext, fontSize: 12, width: 70 },
+  profileRowValue: { color: COLORS.text, fontSize: 12, fontWeight: '700', flex: 1, textAlign: 'right' },
+  interestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  interestChip: { backgroundColor: COLORS.greenSoft, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999 },
+  interestChipText: { color: COLORS.greenDark, fontSize: 12, fontWeight: '700' },
+  profileActionRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  profileActionButton: { flex: 1, height: 52, borderRadius: 15, borderWidth: 1, borderColor: COLORS.green, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surface },
+  profileActionButtonDone: { backgroundColor: COLORS.greenSoft },
+  profileActionText: { color: COLORS.green, fontSize: 15, fontWeight: '800' },
+  profileActionTextDone: { color: COLORS.greenDark },
+  profileMessageButton: { flex: 1, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
+  profileMessageButtonText: { color: COLORS.white, fontSize: 15, fontWeight: '800' },
 });
