@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -22,8 +23,8 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-const YEAR_OPTIONS = Array.from({ length: 25 }, (_, i) => `${2026 + i}년`);
-const TERM_OPTIONS = ['1학기', '2학기', '여름계절학기', '겨울계절학기'];
+const YEARS = Array.from({ length: 25 }, (_, index) => 2026 + index);
+const TERMS = ['1학기', '2학기', '여름계절학기', '겨울계절학기'];
 const WHEEL_ITEM_HEIGHT = 44;
 
 export default function App() {
@@ -64,13 +65,72 @@ export default function App() {
 }
 
 function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
-  const [country, setCountry] = useState(initialValue?.country || '');
-  const [city, setCity] = useState(initialValue?.city || '');
-  const [university, setUniversity] = useState(initialValue?.university || '');
-  const [year, setYear] = useState(initialValue?.year || '2027년');
-  const [term, setTerm] = useState(initialValue?.term || '1학기');
+  const initialSemester = parseSemester(initialValue?.semester);
+  const [year, setYear] = useState(initialSemester.year);
+  const [term, setTerm] = useState(initialSemester.term);
+  const [schoolQuery, setSchoolQuery] = useState(initialValue?.universityName || '');
+  const [selectedUniversity, setSelectedUniversity] = useState(
+    initialValue?.universityId
+      ? {
+          id: initialValue.universityId,
+          name: initialValue.universityName,
+          country: initialValue.country,
+          countryCode: initialValue.countryCode,
+          city: initialValue.city,
+        }
+      : null
+  );
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
-  const canSave = country.trim() && city.trim() && university.trim();
+  useEffect(() => {
+    const query = schoolQuery.trim();
+
+    if (selectedUniversity && query === selectedUniversity.name) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    if (query.length < 2) {
+      setResults([]);
+      setSearching(false);
+      setSearchError('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setSearching(true);
+        setSearchError('');
+        const url = `https://api.ror.org/v2/organizations?query=${encodeURIComponent(
+          query
+        )}&filter=types:education`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('search failed');
+        const data = await response.json();
+        const normalized = (data.items || []).slice(0, 8).map(normalizeRorOrganization);
+        setResults(normalized);
+      } catch (error) {
+        setResults([]);
+        setSearchError('대학 검색에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [schoolQuery, selectedUniversity]);
+
+  const semester = `${year}년 ${term}`;
+  const canSave = Boolean(selectedUniversity && year && term);
+
+  const chooseUniversity = (university) => {
+    setSelectedUniversity(university);
+    setSchoolQuery(university.name);
+    setResults([]);
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -84,18 +144,70 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
           <View style={{ width: 34 }} />
         </View>
 
-        <Field label="국가" value={country} onChangeText={setCountry} placeholder="예: 덴마크" />
-        <Field label="도시" value={city} onChangeText={setCity} placeholder="예: 코펜하겐" />
-        <Field label="파견 대학" value={university} onChangeText={setUniversity} placeholder="예: University of Copenhagen" />
+        <View style={styles.fieldWrap}>
+          <Text style={styles.fieldLabel}>파견 대학</Text>
+          <TextInput
+            style={styles.input}
+            value={schoolQuery}
+            onChangeText={(text) => {
+              setSchoolQuery(text);
+              if (!selectedUniversity || text !== selectedUniversity.name) {
+                setSelectedUniversity(null);
+              }
+            }}
+            placeholder="대학 이름 또는 약자를 검색하세요"
+            placeholderTextColor="#A1A7A2"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          {searching && (
+            <View style={styles.searchStatusRow}>
+              <ActivityIndicator size="small" color={COLORS.green} />
+              <Text style={styles.searchStatusText}>전 세계 대학 검색 중...</Text>
+            </View>
+          )}
+
+          {!!searchError && <Text style={styles.searchError}>{searchError}</Text>}
+
+          {results.length > 0 && (
+            <View style={styles.searchResultsBox}>
+              {results.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  activeOpacity={0.75}
+                  style={styles.searchResultItem}
+                  onPress={() => chooseUniversity(item)}
+                >
+                  <Text style={styles.searchResultName}>{item.name}</Text>
+                  <Text style={styles.searchResultLocation}>
+                    {[item.city, item.country].filter(Boolean).join(', ')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {selectedUniversity && (
+            <View style={styles.selectedSchoolCard}>
+              <Text style={styles.selectedSchoolLabel}>선택된 대학</Text>
+              <Text style={styles.selectedSchoolName}>{selectedUniversity.name}</Text>
+              <Text style={styles.selectedSchoolLocation}>
+                {[selectedUniversity.city, selectedUniversity.country].filter(Boolean).join(' · ')}
+              </Text>
+              <Text style={styles.selectedSchoolId}>ROR ID · {selectedUniversity.id}</Text>
+            </View>
+          )}
+        </View>
 
         <View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>파견 학기</Text>
-          <Text style={styles.wheelHelp}>휠을 위아래로 돌려 선택하세요</Text>
+          <Text style={styles.helperText}>연도와 학기를 각각 위아래로 돌려 선택하세요.</Text>
           <View style={styles.wheelRow}>
-            <WheelPicker options={YEAR_OPTIONS} value={year} onChange={setYear} />
-            <WheelPicker options={TERM_OPTIONS} value={term} onChange={setTerm} />
+            <WheelPicker items={YEARS} value={year} onChange={setYear} formatItem={(item) => `${item}년`} />
+            <WheelPicker items={TERMS} value={term} onChange={setTerm} formatItem={(item) => item} />
           </View>
-          <Text style={styles.selectedSemester}>선택: {year} {term}</Text>
+          <Text style={styles.semesterPreview}>선택: {semester}</Text>
         </View>
 
         <TouchableOpacity
@@ -103,12 +215,12 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
           style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
           onPress={() =>
             onSave({
-              country: country.trim(),
-              city: city.trim(),
-              university: university.trim(),
-              year,
-              term,
-              semester: `${year} ${term}`,
+              universityId: selectedUniversity.id,
+              universityName: selectedUniversity.name,
+              country: selectedUniversity.country,
+              countryCode: selectedUniversity.countryCode,
+              city: selectedUniversity.city,
+              semester,
             })
           }
         >
@@ -119,57 +231,47 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
   );
 }
 
-function WheelPicker({ options, value, onChange }) {
-  const ref = useRef(null);
-  const selectedIndex = Math.max(0, options.indexOf(value));
+function WheelPicker({ items, value, onChange, formatItem }) {
+  const scrollRef = useRef(null);
+  const currentIndex = Math.max(0, items.findIndex((item) => item === value));
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      ref.current?.scrollTo({ y: selectedIndex * WHEEL_ITEM_HEIGHT, animated: false });
-    }, 0);
-    return () => clearTimeout(timer);
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: currentIndex * WHEEL_ITEM_HEIGHT, animated: false });
+    });
   }, []);
 
-  const updateSelection = (offsetY) => {
-    const index = Math.max(0, Math.min(options.length - 1, Math.round(offsetY / WHEEL_ITEM_HEIGHT)));
-    onChange(options[index]);
+  const handleEnd = (event) => {
+    const offset = event.nativeEvent.contentOffset.y;
+    const index = Math.max(0, Math.min(items.length - 1, Math.round(offset / WHEEL_ITEM_HEIGHT)));
+    onChange(items[index]);
+    scrollRef.current?.scrollTo({ y: index * WHEEL_ITEM_HEIGHT, animated: true });
   };
 
   return (
-    <View style={styles.wheelBox}>
-      <View pointerEvents="none" style={styles.wheelSelection} />
+    <View style={styles.wheelContainer}>
+      <View pointerEvents="none" style={styles.wheelHighlight} />
       <ScrollView
-        ref={ref}
+        ref={scrollRef}
         style={styles.wheel}
         contentContainerStyle={styles.wheelContent}
         showsVerticalScrollIndicator={false}
         snapToInterval={WHEEL_ITEM_HEIGHT}
         decelerationRate="fast"
-        nestedScrollEnabled
-        onMomentumScrollEnd={(event) => updateSelection(event.nativeEvent.contentOffset.y)}
-        onScrollEndDrag={(event) => updateSelection(event.nativeEvent.contentOffset.y)}
+        onMomentumScrollEnd={handleEnd}
+        onScrollEndDrag={handleEnd}
       >
-        {options.map((option) => (
-          <View key={option} style={styles.wheelItem}>
-            <Text style={[styles.wheelItemText, option === value && styles.wheelItemTextSelected]}>{option}</Text>
-          </View>
-        ))}
+        {items.map((item) => {
+          const selected = item === value;
+          return (
+            <View key={String(item)} style={styles.wheelItem}>
+              <Text style={[styles.wheelText, selected && styles.wheelTextSelected]}>
+                {formatItem(item)}
+              </Text>
+            </View>
+          );
+        })}
       </ScrollView>
-    </View>
-  );
-}
-
-function Field({ label, value, onChangeText, placeholder }) {
-  return (
-    <View style={styles.fieldWrap}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#A1A7A2"
-      />
     </View>
   );
 }
@@ -193,8 +295,13 @@ function HomeScreen({ exchangeInfo, onRegister }) {
           <Text style={styles.cardEyebrow}>MY EXCHANGE</Text>
           {exchangeInfo ? (
             <>
-              <Text style={styles.destinationTitle}>{exchangeInfo.city} · {exchangeInfo.university}</Text>
-              <Text style={styles.destinationBody}>{exchangeInfo.country} · {exchangeInfo.semester}</Text>
+              <Text style={styles.destinationTitle}>
+                {exchangeInfo.city ? `${exchangeInfo.city} · ` : ''}
+                {exchangeInfo.universityName}
+              </Text>
+              <Text style={styles.destinationBody}>
+                {exchangeInfo.country} · {exchangeInfo.semester}
+              </Text>
               <TouchableOpacity style={styles.registerButton} onPress={onRegister}>
                 <Text style={styles.registerButtonText}>파견 정보 수정하기</Text>
               </TouchableOpacity>
@@ -202,7 +309,9 @@ function HomeScreen({ exchangeInfo, onRegister }) {
           ) : (
             <>
               <Text style={styles.destinationTitle}>아직 파견 정보를 등록하지 않았어요</Text>
-              <Text style={styles.destinationBody}>국가 · 대학 · 학기를 등록하면 나와 같은 교환학생을 바로 찾을 수 있어요.</Text>
+              <Text style={styles.destinationBody}>
+                대학과 학기를 등록하면 같은 파견지의 교환학생을 바로 찾을 수 있어요.
+              </Text>
               <TouchableOpacity style={styles.registerButton} onPress={onRegister}>
                 <Text style={styles.registerButtonText}>파견 정보 등록하기</Text>
               </TouchableOpacity>
@@ -260,6 +369,33 @@ function NavItem({ label, icon, active = false }) {
   );
 }
 
+function normalizeRorOrganization(item) {
+  const displayName =
+    item.names?.find((name) => name.types?.includes('ror_display'))?.value ||
+    item.names?.[0]?.value ||
+    '이름 없는 기관';
+  const location = item.locations?.[0]?.geonames_details || {};
+
+  return {
+    id: item.id,
+    name: displayName,
+    city: location.name || '',
+    country: location.country_name || '',
+    countryCode: location.country_code || '',
+  };
+}
+
+function parseSemester(value) {
+  const match = typeof value === 'string' ? value.match(/^(\d{4})년\s(.+)$/) : null;
+  const parsedYear = Number(match?.[1]);
+  const parsedTerm = match?.[2];
+
+  return {
+    year: YEARS.includes(parsedYear) ? parsedYear : 2027,
+    term: TERMS.includes(parsedTerm) ? parsedTerm : '1학기',
+  };
+}
+
 const styles = StyleSheet.create({
   introScreen: { flex: 1, backgroundColor: COLORS.background, paddingHorizontal: 28, paddingBottom: 26 },
   introContent: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -303,19 +439,31 @@ const styles = StyleSheet.create({
   formHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 30 },
   formTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text },
   cancelText: { fontSize: 15, color: COLORS.green, fontWeight: '700' },
-  fieldWrap: { marginBottom: 18 },
+  fieldWrap: { marginBottom: 22 },
   fieldLabel: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
+  helperText: { color: COLORS.subtext, fontSize: 12, marginBottom: 10 },
   input: { height: 52, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, paddingHorizontal: 15, fontSize: 15, color: COLORS.text },
-  wheelHelp: { color: COLORS.subtext, fontSize: 12, marginBottom: 10 },
-  wheelRow: { flexDirection: 'row', gap: 10 },
-  wheelBox: { flex: 1, height: 132, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, backgroundColor: COLORS.surface, overflow: 'hidden' },
+  searchStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
+  searchStatusText: { color: COLORS.subtext, fontSize: 12 },
+  searchError: { color: '#A34A4A', fontSize: 12, marginTop: 8 },
+  searchResultsBox: { marginTop: 8, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, overflow: 'hidden' },
+  searchResultItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.line },
+  searchResultName: { color: COLORS.text, fontSize: 14, fontWeight: '800' },
+  searchResultLocation: { marginTop: 4, color: COLORS.subtext, fontSize: 12 },
+  selectedSchoolCard: { marginTop: 10, padding: 14, borderRadius: 14, backgroundColor: COLORS.greenSoft },
+  selectedSchoolLabel: { color: COLORS.green, fontSize: 11, fontWeight: '800', marginBottom: 5 },
+  selectedSchoolName: { color: COLORS.text, fontSize: 15, fontWeight: '800' },
+  selectedSchoolLocation: { color: COLORS.subtext, fontSize: 12, marginTop: 5 },
+  selectedSchoolId: { color: COLORS.subtext, fontSize: 10, marginTop: 7 },
+  wheelRow: { flexDirection: 'row', gap: 12 },
+  wheelContainer: { flex: 1, height: WHEEL_ITEM_HEIGHT * 3, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, backgroundColor: COLORS.surface, overflow: 'hidden' },
   wheel: { flex: 1 },
   wheelContent: { paddingVertical: WHEEL_ITEM_HEIGHT },
-  wheelSelection: { position: 'absolute', top: WHEEL_ITEM_HEIGHT, left: 8, right: 8, height: WHEEL_ITEM_HEIGHT, borderRadius: 10, backgroundColor: COLORS.greenSoft, zIndex: 0 },
-  wheelItem: { height: WHEEL_ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  wheelItemText: { color: '#A2A8A3', fontSize: 15, fontWeight: '600' },
-  wheelItemTextSelected: { color: COLORS.greenDark, fontSize: 16, fontWeight: '800' },
-  selectedSemester: { marginTop: 10, color: COLORS.greenDark, fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  wheelHighlight: { position: 'absolute', left: 6, right: 6, top: WHEEL_ITEM_HEIGHT, height: WHEEL_ITEM_HEIGHT, borderRadius: 10, backgroundColor: COLORS.greenSoft, zIndex: 0 },
+  wheelItem: { height: WHEEL_ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  wheelText: { color: '#9AA19C', fontSize: 14, fontWeight: '600' },
+  wheelTextSelected: { color: COLORS.greenDark, fontSize: 16, fontWeight: '800' },
+  semesterPreview: { marginTop: 10, textAlign: 'center', color: COLORS.greenDark, fontSize: 13, fontWeight: '800' },
   saveButton: { marginTop: 12, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
   saveButtonDisabled: { opacity: 0.35 },
   saveButtonText: { color: COLORS.white, fontSize: 16, fontWeight: '800' },
