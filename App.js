@@ -27,6 +27,53 @@ const YEARS = Array.from({ length: 25 }, (_, index) => 2026 + index);
 const TERMS = ['1학기', '2학기', '여름계절학기', '겨울계절학기'];
 const WHEEL_ITEM_HEIGHT = 44;
 
+const SAMPLE_USERS = [
+  {
+    id: 'u1',
+    name: '민지',
+    universityId: 'https://ror.org/035b05819',
+    universityName: 'University of Copenhagen',
+    city: 'Copenhagen',
+    country: 'Denmark',
+    semester: '2027년 1학기',
+    homeUniversity: '연세대학교',
+    intro: '여행이랑 카페 좋아해요!',
+  },
+  {
+    id: 'u2',
+    name: '서윤',
+    universityId: 'https://ror.org/035b05819',
+    universityName: 'University of Copenhagen',
+    city: 'Copenhagen',
+    country: 'Denmark',
+    semester: '2027년 1학기',
+    homeUniversity: '고려대학교',
+    intro: '코펜하겐 같이 돌아다닐 친구 구해요.',
+  },
+  {
+    id: 'u3',
+    name: '지우',
+    universityId: 'https://ror.org/035b05819',
+    universityName: 'University of Copenhagen',
+    city: 'Copenhagen',
+    country: 'Denmark',
+    semester: '2027년 2학기',
+    homeUniversity: '성균관대학교',
+    intro: '맛집 탐방 좋아합니다.',
+  },
+  {
+    id: 'u4',
+    name: '현우',
+    universityId: 'https://ror.org/05f0yaq80',
+    universityName: 'Copenhagen Business School',
+    city: 'Frederiksberg',
+    country: 'Denmark',
+    semester: '2027년 1학기',
+    homeUniversity: '한양대학교',
+    intro: '축구랑 여행 좋아해요.',
+  },
+];
+
 export default function App() {
   const [started, setStarted] = useState(false);
   const [screen, setScreen] = useState('home');
@@ -61,7 +108,23 @@ export default function App() {
     );
   }
 
-  return <HomeScreen exchangeInfo={exchangeInfo} onRegister={() => setScreen('register')} />;
+  if (screen === 'find') {
+    return (
+      <FindStudentsScreen
+        exchangeInfo={exchangeInfo}
+        onBack={() => setScreen('home')}
+        onRegister={() => setScreen('register')}
+      />
+    );
+  }
+
+  return (
+    <HomeScreen
+      exchangeInfo={exchangeInfo}
+      onRegister={() => setScreen('register')}
+      onFind={() => setScreen('find')}
+    />
+  );
 }
 
 function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
@@ -276,7 +339,100 @@ function WheelPicker({ items, value, onChange, formatItem }) {
   );
 }
 
-function HomeScreen({ exchangeInfo, onRegister }) {
+function FindStudentsScreen({ exchangeInfo, onBack, onRegister }) {
+  const [filter, setFilter] = useState('same');
+
+  if (!exchangeInfo) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.findHeader}>
+          <TouchableOpacity onPress={onBack}><Text style={styles.cancelText}>‹ 홈</Text></TouchableOpacity>
+          <Text style={styles.formTitle}>교환학생 찾기</Text>
+          <View style={{ width: 34 }} />
+        </View>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>먼저 파견 정보를 등록해 주세요</Text>
+          <Text style={styles.emptyBody}>같은 대학과 학기의 교환학생을 찾으려면 내 파견 정보가 필요해요.</Text>
+          <TouchableOpacity style={styles.saveButton} onPress={onRegister}>
+            <Text style={styles.saveButtonText}>파견 정보 등록하기</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const sameSchool = SAMPLE_USERS.filter(
+    (user) => user.universityId === exchangeInfo.universityId && user.semester === exchangeInfo.semester
+  );
+  const sameCity = SAMPLE_USERS.filter(
+    (user) => user.city === exchangeInfo.city && user.semester === exchangeInfo.semester
+  );
+  const users = filter === 'same' ? sameSchool : sameCity;
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.findHeader}>
+        <TouchableOpacity onPress={onBack}><Text style={styles.cancelText}>‹ 홈</Text></TouchableOpacity>
+        <Text style={styles.formTitle}>교환학생 찾기</Text>
+        <View style={{ width: 34 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.findContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.matchSummary}>
+          <Text style={styles.matchSummaryTitle}>{exchangeInfo.universityName}</Text>
+          <Text style={styles.matchSummaryMeta}>{exchangeInfo.city} · {exchangeInfo.semester}</Text>
+        </View>
+
+        <View style={styles.filterRow}>
+          <TouchableOpacity
+            style={[styles.filterChip, filter === 'same' && styles.filterChipActive]}
+            onPress={() => setFilter('same')}
+          >
+            <Text style={[styles.filterChipText, filter === 'same' && styles.filterChipTextActive]}>같은 대학 · 학기</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, filter === 'city' && styles.filterChipActive]}
+            onPress={() => setFilter('city')}
+          >
+            <Text style={[styles.filterChipText, filter === 'city' && styles.filterChipTextActive]}>같은 도시 · 학기</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.resultCount}>{users.length}명 찾았어요</Text>
+
+        {users.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>아직 등록된 사람이 없어요</Text>
+            <Text style={styles.emptyBody}>회원 데이터가 쌓이면 여기에 실제 교환학생이 표시돼요.</Text>
+          </View>
+        ) : (
+          users.map((user) => <StudentCard key={user.id} user={user} />)
+        )}
+
+        <Text style={styles.prototypeNote}>지금은 기능 테스트용 샘플 사용자예요. 다음 단계에서 실제 회원 DB와 연결할 거예요.</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function StudentCard({ user }) {
+  return (
+    <TouchableOpacity activeOpacity={0.8} style={styles.studentCard}>
+      <View style={styles.studentAvatar}><Text style={styles.studentAvatarText}>{user.name.slice(0, 1)}</Text></View>
+      <View style={styles.studentInfo}>
+        <Text style={styles.studentName}>{user.name}</Text>
+        <Text style={styles.studentSchool}>{user.homeUniversity}</Text>
+        <Text style={styles.studentIntro}>{user.intro}</Text>
+        <Text style={styles.studentMeta}>{user.universityName} · {user.semester}</Text>
+      </View>
+      <Text style={styles.studentArrow}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
+function HomeScreen({ exchangeInfo, onRegister, onFind }) {
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar barStyle="dark-content" />
@@ -299,9 +455,7 @@ function HomeScreen({ exchangeInfo, onRegister }) {
                 {exchangeInfo.city ? `${exchangeInfo.city} · ` : ''}
                 {exchangeInfo.universityName}
               </Text>
-              <Text style={styles.destinationBody}>
-                {exchangeInfo.country} · {exchangeInfo.semester}
-              </Text>
+              <Text style={styles.destinationBody}>{exchangeInfo.country} · {exchangeInfo.semester}</Text>
               <TouchableOpacity style={styles.registerButton} onPress={onRegister}>
                 <Text style={styles.registerButtonText}>파견 정보 수정하기</Text>
               </TouchableOpacity>
@@ -309,9 +463,7 @@ function HomeScreen({ exchangeInfo, onRegister }) {
           ) : (
             <>
               <Text style={styles.destinationTitle}>아직 파견 정보를 등록하지 않았어요</Text>
-              <Text style={styles.destinationBody}>
-                대학과 학기를 등록하면 같은 파견지의 교환학생을 바로 찾을 수 있어요.
-              </Text>
+              <Text style={styles.destinationBody}>대학과 학기를 등록하면 같은 파견지의 교환학생을 바로 찾을 수 있어요.</Text>
               <TouchableOpacity style={styles.registerButton} onPress={onRegister}>
                 <Text style={styles.registerButtonText}>파견 정보 등록하기</Text>
               </TouchableOpacity>
@@ -321,7 +473,7 @@ function HomeScreen({ exchangeInfo, onRegister }) {
 
         <Text style={styles.sectionTitle}>교환점에서 뭐 할까?</Text>
         <View style={styles.grid}>
-          <QuickCard icon="✈️" title="교환학생 찾기" subtitle="같은 도시 · 대학 · 학기" />
+          <QuickCard icon="✈️" title="교환학생 찾기" subtitle="같은 도시 · 대학 · 학기" onPress={onFind} />
           <QuickCard icon="💬" title="커뮤니티" subtitle="질문하고 정보 나누기" />
           <QuickCard icon="✓" title="준비 체크" subtitle="비자 · 서류 · 출국 준비" />
           <QuickCard icon="👤" title="내 정보" subtitle="프로필과 파견 정보" />
@@ -340,7 +492,7 @@ function HomeScreen({ exchangeInfo, onRegister }) {
 
       <View style={styles.bottomNav}>
         <NavItem label="홈" icon="⌂" active />
-        <NavItem label="찾기" icon="⌕" />
+        <NavItem label="찾기" icon="⌕" onPress={onFind} />
         <NavItem label="커뮤니티" icon="◫" />
         <NavItem label="마이" icon="○" />
       </View>
@@ -348,21 +500,19 @@ function HomeScreen({ exchangeInfo, onRegister }) {
   );
 }
 
-function QuickCard({ icon, title, subtitle }) {
+function QuickCard({ icon, title, subtitle, onPress }) {
   return (
-    <TouchableOpacity activeOpacity={0.82} style={styles.quickCard}>
-      <View style={styles.quickIconWrap}>
-        <Text style={styles.quickIcon}>{icon}</Text>
-      </View>
+    <TouchableOpacity activeOpacity={0.82} style={styles.quickCard} onPress={onPress}>
+      <View style={styles.quickIconWrap}><Text style={styles.quickIcon}>{icon}</Text></View>
       <Text style={styles.quickTitle}>{title}</Text>
       <Text style={styles.quickSubtitle}>{subtitle}</Text>
     </TouchableOpacity>
   );
 }
 
-function NavItem({ label, icon, active = false }) {
+function NavItem({ label, icon, active = false, onPress }) {
   return (
-    <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.navItem} activeOpacity={0.8} onPress={onPress}>
       <Text style={[styles.navIcon, active && styles.navActive]}>{icon}</Text>
       <Text style={[styles.navLabel, active && styles.navActive]}>{label}</Text>
     </TouchableOpacity>
@@ -370,12 +520,8 @@ function NavItem({ label, icon, active = false }) {
 }
 
 function normalizeRorOrganization(item) {
-  const displayName =
-    item.names?.find((name) => name.types?.includes('ror_display'))?.value ||
-    item.names?.[0]?.value ||
-    '이름 없는 기관';
+  const displayName = item.names?.find((name) => name.types?.includes('ror_display'))?.value || item.names?.[0]?.value || '이름 없는 기관';
   const location = item.locations?.[0]?.geonames_details || {};
-
   return {
     id: item.id,
     name: displayName,
@@ -389,7 +535,6 @@ function parseSemester(value) {
   const match = typeof value === 'string' ? value.match(/^(\d{4})년\s(.+)$/) : null;
   const parsedYear = Number(match?.[1]);
   const parsedTerm = match?.[2];
-
   return {
     year: YEARS.includes(parsedYear) ? parsedYear : 2027,
     term: TERMS.includes(parsedTerm) ? parsedTerm : '1학기',
@@ -467,4 +612,29 @@ const styles = StyleSheet.create({
   saveButton: { marginTop: 12, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
   saveButtonDisabled: { opacity: 0.35 },
   saveButtonText: { color: COLORS.white, fontSize: 16, fontWeight: '800' },
+  findHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
+  findContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  matchSummary: { backgroundColor: COLORS.greenSoft, borderRadius: 18, padding: 16, marginBottom: 14 },
+  matchSummaryTitle: { color: COLORS.greenDark, fontSize: 16, fontWeight: '800' },
+  matchSummaryMeta: { color: COLORS.subtext, fontSize: 12, marginTop: 6 },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+  filterChip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.surface },
+  filterChipActive: { backgroundColor: COLORS.green, borderColor: COLORS.green },
+  filterChipText: { color: COLORS.text, fontSize: 12, fontWeight: '700' },
+  filterChipTextActive: { color: COLORS.white },
+  resultCount: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginBottom: 12 },
+  studentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 18, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: COLORS.line },
+  studentAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.greenSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  studentAvatarText: { color: COLORS.greenDark, fontSize: 18, fontWeight: '800' },
+  studentInfo: { flex: 1 },
+  studentName: { color: COLORS.text, fontSize: 15, fontWeight: '800' },
+  studentSchool: { color: COLORS.green, fontSize: 12, fontWeight: '700', marginTop: 3 },
+  studentIntro: { color: COLORS.text, fontSize: 12, marginTop: 6 },
+  studentMeta: { color: COLORS.subtext, fontSize: 10, marginTop: 5 },
+  studentArrow: { color: COLORS.subtext, fontSize: 24, marginLeft: 8 },
+  emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  emptyCard: { padding: 20, borderRadius: 18, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
+  emptyTitle: { color: COLORS.text, fontSize: 17, fontWeight: '800' },
+  emptyBody: { color: COLORS.subtext, fontSize: 13, lineHeight: 20, marginTop: 8 },
+  prototypeNote: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 10, textAlign: 'center' },
 });
