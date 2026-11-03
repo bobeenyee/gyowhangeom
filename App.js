@@ -354,7 +354,7 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
   const [schoolQuery, setSchoolQuery] = useState(initialValue?.universityName || '');
   const [selectedUniversity, setSelectedUniversity] = useState(initialValue?.universityId ? {
     id: initialValue.universityId, name: initialValue.universityName, country: initialValue.country,
-    countryCode: initialValue.countryCode, city: initialValue.city,
+    countryCode: initialValue.countryCode, city: initialValue.city, latitude: initialValue.latitude ?? null, longitude: initialValue.longitude ?? null,
   } : null);
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -412,7 +412,7 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
           </View>
           <Text style={styles.semesterPreview}>선택: {semester}</Text>
         </View>
-        <PrimaryButton disabled={!canSave} label="저장하기" onPress={() => onSave({ universityId: selectedUniversity.id, universityName: selectedUniversity.name, country: selectedUniversity.country, countryCode: selectedUniversity.countryCode, city: selectedUniversity.city, semester })} />
+        <PrimaryButton disabled={!canSave} label="저장하기" onPress={() => onSave({ universityId: selectedUniversity.id, universityName: selectedUniversity.name, country: selectedUniversity.country, countryCode: selectedUniversity.countryCode, city: selectedUniversity.city, latitude: selectedUniversity.latitude, longitude: selectedUniversity.longitude, semester })} />
       </ScrollView>
     </Screen>
   );
@@ -438,20 +438,31 @@ function WheelPicker({ items, value, onChange, formatItem }) {
   );
 }
 
-function FindStudentsScreen({ exchangeInfo, onBack, onRegister, onOpenProfile }) {
+function FindStudentsScreen({ exchangeInfo, users, preview, onBack, onRegister, onOpenProfile }) {
   const [filter, setFilter] = useState('same');
   if (!exchangeInfo) return <Screen><TopHeader title="교환학생 찾기" onBack={onBack} /><View style={styles.emptyState}><Text style={styles.emptyTitle}>먼저 파견 정보를 등록해 주세요</Text><Text style={styles.emptyBody}>대학과 학기를 등록하면 같은 파견지의 사람부터 주변 교환학생까지 찾을 수 있어요.</Text><PrimaryButton label="파견 정보 등록하기" onPress={onRegister} /></View></Screen>;
 
-  const semesterUsers = SAMPLE_USERS.filter((user) => user.semester === exchangeInfo.semester);
+  const members = users.filter((user) =>
+    user.semester === exchangeInfo.semester &&
+    (user.countryCode ? user.countryCode === exchangeInfo.countryCode : user.country === exchangeInfo.country));
+  const enriched = members.map((user) => ({
+    ...user,
+    distanceKm: preview && exchangeInfo.city === 'Copenhagen'
+      ? user.distanceKm
+      : distanceKm(exchangeInfo.latitude, exchangeInfo.longitude, user.latitude, user.longitude),
+  }));
   const groups = {
-    same: semesterUsers.filter((user) => user.universityId === exchangeInfo.universityId),
-    city: semesterUsers.filter((user) => user.city === exchangeInfo.city || user.city === 'Frederiksberg'),
-    nearby: semesterUsers.filter((user) => user.country === exchangeInfo.country && user.distanceKm <= 30),
-    country: semesterUsers.filter((user) => user.country === exchangeInfo.country),
+    same: enriched.filter((user) => user.universityId === exchangeInfo.universityId),
+    city: enriched.filter((user) => user.city?.trim().toLowerCase() === exchangeInfo.city?.trim().toLowerCase()),
+    nearby: enriched.filter((user) => user.distanceKm != null && user.distanceKm <= 30),
+    country: enriched,
   };
-  const users = groups[filter];
+  const visibleUsers = groups[filter];
   const tabs = [
-    ['same', `같은 대학 ${groups.same.length}`], ['city', `같은 도시 ${groups.city.length}`], ['nearby', `내 주변 ${groups.nearby.length}`], ['country', `같은 국가 ${groups.country.length}`],
+    ['same', '같은 대학 ' + groups.same.length],
+    ['city', '같은 도시 ' + groups.city.length],
+    ['nearby', '내 주변 ' + groups.nearby.length],
+    ['country', '같은 국가 ' + groups.country.length],
   ];
 
   return (
@@ -459,11 +470,19 @@ function FindStudentsScreen({ exchangeInfo, onBack, onRegister, onOpenProfile })
       <TopHeader title="교환학생 찾기" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.findContent} showsVerticalScrollIndicator={false}>
         <View style={styles.matchSummary}><Text style={styles.matchSummaryTitle}>{exchangeInfo.universityName}</Text><Text style={styles.matchSummaryMeta}>{exchangeInfo.city} · {exchangeInfo.semester}</Text></View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>{tabs.map(([key, label]) => <TouchableOpacity key={key} style={[styles.filterChip, filter === key && styles.filterChipActive]} onPress={() => setFilter(key)}><Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>{label}</Text></TouchableOpacity>)}</ScrollView>
-        {groups.same.length < 3 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>같은 학교 사람이 아직 적어요</Text><Text style={styles.noticeBody}>같은 도시나 주변 30km로 넓히면 다른 대학 교환학생도 만날 수 있어요.</Text></View>}
-        <Text style={styles.resultCount}>{users.length}명 찾았어요</Text>
-        {users.map((user) => <StudentCard key={user.id} user={user} reason={getMatchReason(user, exchangeInfo)} onPress={() => onOpenProfile(user)} />)}
-        <Text style={styles.prototypeNote}>사람찾기 정보와 익명 커뮤니티 활동은 서로 연결되지 않아요.</Text>
+        {preview && <Text style={styles.prototypeNote}>미리보기: 아래 프로필은 실제 가입자가 아닌 예시예요.</Text>}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {tabs.map(([key, label]) => <TouchableOpacity key={key} style={[styles.filterChip, filter === key && styles.filterChipActive]} onPress={() => setFilter(key)}>
+            <Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>{label}</Text>
+          </TouchableOpacity>)}
+        </ScrollView>
+        {groups.same.length < 3 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>같은 학교 사람을 더 찾아볼까요?</Text><Text style={styles.noticeBody}>도시·근처 대학·같은 국가로 범위를 넓혀 보세요.</Text></View>}
+        {filter === 'nearby' && exchangeInfo.latitude == null && !preview &&
+          <View style={styles.noticeBox}><Text style={styles.noticeTitle}>거리 정보를 계산할 수 없어요</Text><Text style={styles.noticeBody}>파견 정보에서 대학을 다시 검색·선택하면 대학 좌표가 저장돼요. 휴대폰 위치는 사용하지 않아요.</Text></View>}
+        <Text style={styles.resultCount}>{visibleUsers.length}명 찾았어요</Text>
+        {visibleUsers.map((user) => <StudentCard key={user.id} user={user} reason={getMatchReason(user, exchangeInfo)} onPress={() => onOpenProfile(user)} />)}
+        {visibleUsers.length === 0 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>아직 조건에 맞는 사람이 없어요</Text><Text style={styles.noticeBody}>다른 범위로 검색해 보세요. 실제 사용자가 가입하면 이 목록에 나타나요.</Text></View>}
+        <Text style={styles.prototypeNote}>사람찾기는 사용자가 공개를 허용한 정보만 보여줘요. 익명 게시글 작성자는 공개되지 않습니다.</Text>
       </ScrollView>
     </Screen>
   );
@@ -485,7 +504,6 @@ function StudentCard({ user, reason, onPress }) {
 }
 
 function StudentProfileScreen({ user, onBack }) {
-  const [requested, setRequested] = useState(false);
   return (
     <Screen>
       <TopHeader title="프로필" onBack={onBack} backLabel="‹ 찾기" />
@@ -503,10 +521,10 @@ function StudentProfileScreen({ user, onBack }) {
           <ProfileRow label="파견 학기" value={user.semester} />
           {user.showHomeUniversity && <ProfileRow label="한국 대학" value={user.homeUniversity} />}
         </ProfileSection>
-        <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>익명 커뮤니티와는 완전히 분리돼요</Text><Text style={styles.privacyNoticeBody}>이 화면의 정보는 사람찾기에서만 보이며, 커뮤니티 글과 댓글로는 이 프로필을 찾을 수 없어요.</Text></View>
+        <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>커뮤니티에서는 공개 프로필이 표시되지 않아요</Text><Text style={styles.privacyNoticeBody}>일반 이용자에게는 게시글 작성자와 이 프로필의 연결 정보가 제공되지 않아요.</Text></View>
         <View style={styles.profileActionRow}>
-          <TouchableOpacity style={[styles.profileActionButton, requested && styles.profileActionButtonDone]} onPress={() => setRequested((v) => !v)}><Text style={styles.profileActionText}>{requested ? '요청 보냄' : '친구추가'}</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.profileMessageButton}><Text style={styles.profileMessageButtonText}>메시지</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.profileActionButton} onPress={() => Alert.alert("친구추가 준비 중", "실제 회원 간 친구 요청 기능은 다음 단계에서 연결할게요.")}><Text style={styles.profileActionText}>친구추가</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.profileMessageButton} onPress={() => Alert.alert("메시지 준비 중", "아직 채팅 서버가 연결되지 않았어요.")}><Text style={styles.profileMessageButtonText}>메시지</Text></TouchableOpacity>
         </View>
       </ScrollView>
     </Screen>
@@ -521,7 +539,7 @@ function CommunityScreen({ posts, onHome, onWrite, onOpen, onMy, onFind }) {
     <Screen>
       <View style={styles.communityHeader}><View><Text style={styles.miniBrand}>교환점</Text><Text style={styles.pageTitle}>익명 커뮤니티</Text></View><TouchableOpacity style={styles.writeButton} onPress={onWrite}><Text style={styles.writeButtonText}>글쓰기</Text></TouchableOpacity></View>
       <ScrollView contentContainerStyle={styles.communityContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.anonymousBanner}><Text style={styles.anonymousTitle}>완전 익명으로 이야기해요</Text><Text style={styles.anonymousBody}>사람찾기 프로필과 연결되지 않고, 게시글에서 개인 프로필로 이동할 수도 없어요.</Text></View>
+        <View style={styles.anonymousBanner}><Text style={styles.anonymousTitle}>닉네임 없이 질문하고 답해요</Text><Text style={styles.anonymousBody}>게시글에는 사람찾기 프로필을 표시하지 않아요. 서비스 운영상 작성자 확인 기록은 별도로 관리돼요.</Text></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>{categories.map((item) => <TouchableOpacity key={item} onPress={() => setCategory(item)} style={[styles.filterChip, category === item && styles.filterChipActive]}><Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text></TouchableOpacity>)}</ScrollView>
         {visible.map((post) => <TouchableOpacity key={post.id} style={styles.communityPost} onPress={() => onOpen(post.id)}>
           <View style={styles.inlineRow}><Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postTime}>{post.time}</Text></View>
@@ -557,26 +575,45 @@ function PostDetailScreen({ post, onBack, onAddComment }) {
       <Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postDetailTitle}>{post.title}</Text><Text style={styles.postDetailMeta}>익명 · {post.meta} · {post.time}</Text><Text style={styles.postDetailBody}>{post.body}</Text>
       <Text style={styles.commentHeader}>댓글 {post.comments.length}</Text>
       {post.comments.map((item, index) => <View key={`${item}-${index}`} style={styles.commentCard}><Text style={styles.commentAuthor}>익명{index + 1}</Text><Text style={styles.commentText}>{item}</Text></View>)}
-      <View style={styles.commentInputRow}><TextInput style={styles.commentInput} value={comment} onChangeText={setComment} placeholder="익명 댓글 입력" placeholderTextColor="#A1A7A2" /><TouchableOpacity style={styles.commentSend} onPress={() => { if (!comment.trim()) return; onAddComment(comment.trim()); setComment(''); }}><Text style={styles.commentSendText}>등록</Text></TouchableOpacity></View>
+      <View style={styles.commentInputRow}><TextInput style={styles.commentInput} value={comment} onChangeText={setComment} placeholder="익명 댓글 입력" placeholderTextColor="#A1A7A2" /><TouchableOpacity style={styles.commentSend} onPress={async () => { if (!comment.trim()) return; try { await onAddComment(comment.trim()); setComment(''); } catch (_e) { /* caller displays error */ } }}><Text style={styles.commentSendText}>등록</Text></TouchableOpacity></View>
     </ScrollView></Screen>
   );
 }
 
-function CheckInScreen({ exchangeInfo, answer, onAnswer, onBack }) {
+function CheckInScreen({ exchangeInfo, answer, responses = [], preview = false, onAnswer, onBack }) {
   const [draft, setDraft] = useState(answer);
+  const [sending, setSending] = useState(false);
   const revealed = Boolean(answer);
+  const responseCount = responses.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const submit = async () => {
+    if (!draft.trim() || !exchangeInfo || sending) return;
+    setSending(true);
+    try { await onAnswer(draft.trim()); } finally { setSending(false); }
+  };
   return (
     <Screen><TopHeader title="체크인 방" onBack={onBack} /><ScrollView contentContainerStyle={styles.checkinContent}>
-      <View style={styles.roomCard}><Text style={styles.cardEyebrowDark}>MY EXCHANGE ROOM</Text><Text style={styles.roomTitle}>{exchangeInfo ? `${exchangeInfo.city} · ${exchangeInfo.semester}` : '파견 정보를 등록하면 자동으로 방이 생겨요'}</Text><Text style={styles.roomMeta}>같은 시기 교환학생 142명 · 익명 참여</Text></View>
-      <Text style={styles.checkinLabel}>오늘의 체크인</Text><Text style={styles.checkinQuestion}>✈️ 출국 예정일이 언제예요?</Text><Text style={styles.checkinGuide}>내 답을 제출해야 다른 사람의 답을 볼 수 있어요.</Text>
+      <View style={styles.roomCard}><Text style={styles.cardEyebrowDark}>MY EXCHANGE ROOM</Text>
+        <Text style={styles.roomTitle}>{exchangeInfo ? exchangeInfo.city + ' · ' + exchangeInfo.semester : '파견 정보를 등록하면 방이 만들어져요'}</Text>
+        <Text style={styles.roomMeta}>{preview ? '가상 데이터 미리보기' : '현재 체크인 답변 ' + responseCount + '개'} · 익명 체크인</Text>
+      </View>
+      <Text style={styles.checkinLabel}>이번 체크인</Text>
+      <Text style={styles.checkinQuestion}>✈️ 출국 예정일이 언제예요?</Text>
+      <Text style={styles.checkinGuide}>답변은 다른 참여자에게 익명으로 공개돼요. 답해야 다른 답변도 볼 수 있어요.</Text>
       {!revealed ? <>
-        <TextInput style={styles.input} value={draft} onChangeText={setDraft} placeholder="예: 1월 22일" placeholderTextColor="#A1A7A2" />
-        <PrimaryButton disabled={!draft.trim()} label="답변하고 다른 사람 답 보기" onPress={() => onAnswer(draft.trim())} />
+        <TextInput style={styles.input} value={draft} maxLength={40} onChangeText={setDraft} placeholder="예: 1월 22일" placeholderTextColor="#A1A7A2" />
+        <PrimaryButton disabled={!draft.trim() || !exchangeInfo || sending} label={sending ? '저장하는 중...' : '답변하고 다른 사람 답 보기'} onPress={submit} />
       </> : <>
         <View style={styles.myAnswer}><Text style={styles.myAnswerLabel}>내 답변</Text><Text style={styles.myAnswerText}>{answer}</Text></View>
-        <Text style={styles.sectionTitle}>다른 사람들은 이렇게 답했어요</Text>
-        {CHECKIN_RESPONSES.map((item) => <View key={item.answer} style={styles.answerRow}><Text style={styles.answerLabel}>{item.answer}</Text><View style={styles.answerBarTrack}><View style={[styles.answerBarFill, { width: `${Math.min(100, item.count * 8)}%` }]} /></View><Text style={styles.answerCount}>{item.count}명</Text></View>)}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>익명 대화</Text>{CHECKIN_MESSAGES.map((message, index) => <View key={message} style={styles.roomMessage}><Text style={styles.commentAuthor}>익명{index + 1}</Text><Text style={styles.commentText}>{message}</Text></View>)}
+        <Text style={styles.sectionTitle}>다른 사람들의 답변</Text>
+        {responses.length === 0 && <Text style={styles.emptyBody}>아직 집계된 답변이 없어요.</Text>}
+        {responses.map((item) => <View key={item.answer} style={styles.answerRow}>
+          <Text style={styles.answerLabel}>{item.answer}</Text>
+          <View style={styles.answerBarTrack}><View style={[styles.answerBarFill, { width: (responseCount ? Number(item.count) / responseCount * 100 : 0) + '%' }]} /></View>
+          <Text style={styles.answerCount}>{item.count}명</Text>
+        </View>)}
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>익명 대화</Text>
+        {preview ? CHECKIN_MESSAGES.map((message, index) => <View key={message} style={styles.roomMessage}><Text style={styles.commentAuthor}>예시 익명{index + 1}</Text><Text style={styles.commentText}>{message}</Text></View>)
+          : <Text style={styles.emptyBody}>익명 단체 채팅은 아직 연결되지 않았어요. 다음 개발 단계에서 추가할게요.</Text>}
       </>}
     </ScrollView></Screen>
   );
@@ -593,9 +630,9 @@ function ChecklistScreen({ items, onBack, onToggle }) {
   );
 }
 
-function MyScreen({ profile, exchangeInfo, onSave, onBack, onEditExchange, onFind, onCommunity }) {
+function MyScreen({ profile, exchangeInfo, onSave, onSignOut, onBack, onEditExchange, onFind, onCommunity }) {
   const [draft, setDraft] = useState({ ...profile, interestsText: profile.interests.join(', '), styleText: profile.style.join(', ') });
-  const save = () => onSave({ nickname: draft.nickname.trim() || '익명 교환학생', homeUniversity: draft.homeUniversity.trim(), showHomeUniversity: draft.showHomeUniversity, intro: draft.intro.trim(), interests: splitTags(draft.interestsText), style: splitTags(draft.styleText) });
+  const save = () => onSave({ nickname: draft.nickname.trim() || '익명 교환학생', homeUniversity: draft.homeUniversity.trim(), showHomeUniversity: draft.showHomeUniversity, discoverable: draft.discoverable !== false, intro: draft.intro.trim(), interests: splitTags(draft.interestsText), style: splitTags(draft.styleText) });
   return (
     <Screen><TopHeader title="마이" onBack={onBack} /><ScrollView contentContainerStyle={styles.myContent} keyboardShouldPersistTaps="handled">
       <View style={styles.mySection}><Text style={styles.profileSectionTitle}>사람찾기 공개 프로필</Text><Text style={styles.helperText}>이 정보는 사람찾기에서만 사용돼요. 익명 커뮤니티와 연결되지 않습니다.</Text>
@@ -604,17 +641,19 @@ function MyScreen({ profile, exchangeInfo, onSave, onBack, onEditExchange, onFin
         <Field label="관심사 (쉼표로 구분)"><TextInput style={styles.input} value={draft.interestsText} onChangeText={(v) => setDraft({ ...draft, interestsText: v })} /></Field>
         <Field label="여행/생활 스타일 (쉼표로 구분)"><TextInput style={styles.input} value={draft.styleText} onChangeText={(v) => setDraft({ ...draft, styleText: v })} /></Field>
       </View>
-      <View style={styles.mySection}><Text style={styles.profileSectionTitle}>한국 대학 공개</Text><TextInput style={styles.input} value={draft.homeUniversity} onChangeText={(v) => setDraft({ ...draft, homeUniversity: v })} placeholder="한국 소속 대학" placeholderTextColor="#A1A7A2" />
+      <View style={styles.mySection}><Text style={styles.profileSectionTitle}>사람찾기 참여 설정</Text><TouchableOpacity style={styles.toggleRow} onPress={() => setDraft({ ...draft, discoverable: draft.discoverable === false })}><Text style={styles.toggleLabel}>다른 학생에게 내 프로필 공개</Text><View style={[styles.toggle, draft.discoverable !== false && styles.toggleOn]}><View style={[styles.toggleDot, draft.discoverable !== false && styles.toggleDotOn]} /></View></TouchableOpacity></View>
+       <View style={styles.mySection}><Text style={styles.profileSectionTitle}>한국 대학 공개</Text><TextInput style={styles.input} value={draft.homeUniversity} onChangeText={(v) => setDraft({ ...draft, homeUniversity: v })} placeholder="한국 소속 대학" placeholderTextColor="#A1A7A2" />
         <TouchableOpacity style={styles.toggleRow} onPress={() => setDraft({ ...draft, showHomeUniversity: !draft.showHomeUniversity })}><Text style={styles.toggleLabel}>사람찾기에서 한국 대학 공개</Text><View style={[styles.toggle, draft.showHomeUniversity && styles.toggleOn]}><View style={[styles.toggleDot, draft.showHomeUniversity && styles.toggleDotOn]} /></View></TouchableOpacity>
       </View>
       <PrimaryButton label="프로필 저장" onPress={save} />
       <View style={styles.mySection}><Text style={styles.profileSectionTitle}>내 파견 정보</Text>{exchangeInfo ? <><ProfileRow label="대학" value={exchangeInfo.universityName} /><ProfileRow label="학기" value={exchangeInfo.semester} /><SecondaryButton label="파견 정보 수정" onPress={onEditExchange} /></> : <SecondaryButton label="파견 정보 등록" onPress={onEditExchange} />}</View>
-      <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>수집하지 않는 정보</Text><Text style={styles.privacyNoticeBody}>프로필 사진과 SNS는 교환점 프로필에 저장하지 않는 방향으로 잡았어요.</Text></View>
+      <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>프로필 사진 · SNS 없음</Text><Text style={styles.privacyNoticeBody}>교환점은 프로필 사진이나 SNS 계정을 수집하지 않아요.</Text></View>
+      {onSignOut && <SecondaryButton label="로그아웃" onPress={onSignOut} />}
     </ScrollView><BottomNav active="my" onHome={onBack} onFind={onFind} onCommunity={onCommunity} onMy={() => {}} /></Screen>
   );
 }
 
-function HomeScreen({ exchangeInfo, profile, onRegister, onFind, onCommunity, onCheckin, onChecklist, onMy }) {
+function HomeScreen({ exchangeInfo, profile, posts, preview, onRegister, onFind, onCommunity, onCheckin, onChecklist, onMy }) {
   return (
     <Screen><ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><View><Text style={styles.miniBrand}>교환점</Text><Text style={styles.hello}>{profile.nickname}님, 안녕하세요 👋</Text></View></View>
@@ -627,7 +666,7 @@ function HomeScreen({ exchangeInfo, profile, onRegister, onFind, onCommunity, on
         <QuickCard icon="✓" title="준비 체크" subtitle="비자 · 서류 · 출국 준비" onPress={onChecklist} />
       </View>
       <View style={styles.sectionRow}><Text style={styles.sectionTitle}>지금 많이 찾는 이야기</Text><TouchableOpacity onPress={onCommunity}><Text style={styles.moreText}>전체보기</Text></TouchableOpacity></View>
-      <TouchableOpacity style={styles.postCard} onPress={onCommunity}><Text style={styles.postBadge}>익명 · 여행메이트</Text><Text style={styles.postTitle}>코펜하겐에서 같이 여행 갈 사람?</Text><Text style={styles.postMeta}>덴마크 · 2027년 1학기 · 방금</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.postCard} onPress={onCommunity}><Text style={styles.postBadge}>{preview ? "미리보기 · " : ""}익명 커뮤니티</Text><Text style={styles.postTitle}>{posts?.[0]?.title || "아직 게시글이 없어요. 첫 질문을 작성해 보세요."}</Text><Text style={styles.postMeta}>{posts?.[0]?.meta || "커뮤니티에 글을 남겨봐요"}</Text></TouchableOpacity>
     </ScrollView><BottomNav active="home" onHome={() => {}} onFind={onFind} onCommunity={onCommunity} onMy={onMy} /></Screen>
   );
 }
@@ -647,10 +686,10 @@ function NavItem({ label, icon, active, onPress }) { return <TouchableOpacity st
 function normalizeRorOrganization(item) {
   const displayName = item.names?.find((name) => name.types?.includes('ror_display'))?.value || item.names?.[0]?.value || '이름 없는 기관';
   const location = item.locations?.[0]?.geonames_details || {};
-  return { id: item.id, name: displayName, city: location.name || '', country: location.country_name || '', countryCode: location.country_code || '' };
+  return { id: item.id, name: displayName, city: location.name || '', country: location.country_name || '', countryCode: location.country_code || '', latitude: typeof location.lat === 'number' ? location.lat : null, longitude: typeof location.lng === 'number' ? location.lng : null };
 }
 function parseSemester(value) { const match = typeof value === 'string' ? value.match(/^(\d{4})년\s(.+)$/) : null; const parsedYear = Number(match?.[1]); const parsedTerm = match?.[2]; return { year: YEARS.includes(parsedYear) ? parsedYear : 2027, term: TERMS.includes(parsedTerm) ? parsedTerm : '1학기' }; }
-function getMatchReason(user, exchangeInfo) { if (user.universityId === exchangeInfo.universityId) return '같은 대학'; if (user.city === exchangeInfo.city) return '같은 도시'; if (user.distanceKm <= 30) return `약 ${user.distanceKm}km`; return '같은 국가'; }
+function getMatchReason(user, exchangeInfo) { if (user.universityId === exchangeInfo.universityId) return '같은 대학'; if (user.city?.toLowerCase() === exchangeInfo.city?.toLowerCase()) return '같은 도시'; if (user.distanceKm != null && user.distanceKm <= 30) return '약 ' + Math.round(user.distanceKm) + 'km'; return '같은 국가'; }
 function splitTags(value) { return value.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 8); }
 
 const styles = StyleSheet.create({
