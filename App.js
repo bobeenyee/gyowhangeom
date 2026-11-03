@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -21,110 +21,93 @@ const COLORS = {
   subtext: '#7A837D',
   line: '#E8E4DA',
   white: '#FFFFFF',
+  warning: '#9A6B3A',
 };
 
 const YEARS = Array.from({ length: 25 }, (_, index) => 2026 + index);
 const TERMS = ['1학기', '2학기', '여름계절학기', '겨울계절학기'];
 const WHEEL_ITEM_HEIGHT = 44;
-const NEARBY_KM = 30;
 
 const SAMPLE_USERS = [
   {
-    id: 'u1',
-    nickname: '민지',
-    universityId: 'https://ror.org/035b05819',
-    universityName: 'University of Copenhagen',
-    city: 'Copenhagen',
-    country: 'Denmark',
-    semester: '2027년 1학기',
-    latitude: 55.68,
-    longitude: 12.57,
-    homeUniversity: '연세대학교',
-    showHomeUniversity: false,
+    id: 'u1', nickname: '민지', universityId: 'https://ror.org/035b05819', universityName: 'University of Copenhagen',
+    city: 'Copenhagen', country: 'Denmark', semester: '2027년 1학기', homeUniversity: '연세대학교', showHomeUniversity: false,
     intro: '여행이랑 카페 좋아해요! 주말에 같이 돌아다닐 친구를 찾고 있어요.',
-    interests: ['여행', '카페', '사진'],
-    style: ['계획형', '주말여행 자주', '천천히 구경'],
+    interests: ['여행', '카페', '사진'], style: ['계획형', '주말여행 자주', '천천히 구경'], distanceKm: 0,
   },
   {
-    id: 'u2',
-    nickname: '서윤',
-    universityId: 'https://ror.org/035b05819',
-    universityName: 'University of Copenhagen',
-    city: 'Copenhagen',
-    country: 'Denmark',
-    semester: '2027년 1학기',
-    latitude: 55.68,
-    longitude: 12.57,
-    homeUniversity: '고려대학교',
-    showHomeUniversity: true,
+    id: 'u2', nickname: '서윤', universityId: 'https://ror.org/035b05819', universityName: 'University of Copenhagen',
+    city: 'Copenhagen', country: 'Denmark', semester: '2027년 1학기', homeUniversity: '고려대학교', showHomeUniversity: true,
     intro: '코펜하겐 같이 돌아다닐 친구 구해요. 맛집이랑 산책 좋아해요.',
-    interests: ['맛집', '산책', '여행메이트'],
-    style: ['즉흥형', '카페 좋아함', '사진 많이 찍음'],
+    interests: ['맛집', '산책', '여행메이트'], style: ['즉흥형', '카페 좋아함', '사진 많이 찍음'], distanceKm: 0,
   },
   {
-    id: 'u3',
-    nickname: '현우',
-    universityId: 'https://ror.org/05f0yaq80',
-    universityName: 'Copenhagen Business School',
-    city: 'Frederiksberg',
-    country: 'Denmark',
-    semester: '2027년 1학기',
-    latitude: 55.68,
-    longitude: 12.53,
-    homeUniversity: '한양대학교',
-    showHomeUniversity: false,
+    id: 'u3', nickname: '현우', universityId: 'https://ror.org/05f0yaq80', universityName: 'Copenhagen Business School',
+    city: 'Frederiksberg', country: 'Denmark', semester: '2027년 1학기', homeUniversity: '한양대학교', showHomeUniversity: false,
     intro: '축구랑 여행 좋아해요. 주말에 근교 여행 같이 가요.',
-    interests: ['축구', '여행', '러닝'],
-    style: ['활동적', '주말여행 자주'],
+    interests: ['축구', '여행', '러닝'], style: ['활동적', '주말여행 자주'], distanceKm: 2,
   },
   {
-    id: 'u4',
-    nickname: '하린',
-    universityId: 'sample-itu',
-    universityName: 'IT University of Copenhagen',
-    city: 'Copenhagen',
-    country: 'Denmark',
-    semester: '2027년 1학기',
-    latitude: 55.66,
-    longitude: 12.59,
-    homeUniversity: '국민대학교',
-    showHomeUniversity: true,
+    id: 'u4', nickname: '하린', universityId: 'itu-cph', universityName: 'IT University of Copenhagen',
+    city: 'Copenhagen', country: 'Denmark', semester: '2027년 1학기', homeUniversity: '국민대학교', showHomeUniversity: true,
     intro: '전시랑 맛집 다니는 거 좋아해요. 평일 저녁에도 자주 나가요.',
-    interests: ['전시', '맛집', '카페'],
-    style: ['즉흥형', '도시여행', '평일 약속 가능'],
+    interests: ['전시', '맛집', '카페'], style: ['즉흥형', '도시여행', '저녁약속 좋아함'], distanceKm: 5,
   },
   {
-    id: 'u5',
-    nickname: '도윤',
-    universityId: 'sample-dtu',
-    universityName: 'Technical University of Denmark',
-    city: 'Kongens Lyngby',
-    country: 'Denmark',
-    semester: '2027년 1학기',
-    latitude: 55.79,
-    longitude: 12.52,
-    homeUniversity: '부산대학교',
-    showHomeUniversity: false,
+    id: 'u5', nickname: '도윤', universityId: 'dtu', universityName: 'Technical University of Denmark',
+    city: 'Kongens Lyngby', country: 'Denmark', semester: '2027년 1학기', homeUniversity: '서울대학교', showHomeUniversity: false,
     intro: '자전거 타고 근교 돌아다니는 걸 좋아해요.',
-    interests: ['자전거', '여행', '자연'],
-    style: ['활동적', '아침형', '근교여행'],
+    interests: ['자전거', '여행', '자연'], style: ['활동적', '아침형', '근교여행'], distanceKm: 13,
   },
   {
-    id: 'u6',
-    nickname: '수아',
-    universityId: 'sample-aarhus',
-    universityName: 'Aarhus University',
-    city: 'Aarhus',
-    country: 'Denmark',
-    semester: '2027년 1학기',
-    latitude: 56.17,
-    longitude: 10.20,
-    homeUniversity: '이화여자대학교',
-    showHomeUniversity: false,
-    intro: '덴마크 안에서 도시 여행 같이 할 친구 찾아요.',
-    interests: ['여행', '사진', '베이커리'],
-    style: ['계획형', '도시여행'],
+    id: 'u6', nickname: '수아', universityId: 'aarhus', universityName: 'Aarhus University',
+    city: 'Aarhus', country: 'Denmark', semester: '2027년 1학기', homeUniversity: '이화여자대학교', showHomeUniversity: false,
+    intro: '덴마크 여기저기 여행 같이 할 친구 찾아요.',
+    interests: ['여행', '공연', '맛집'], style: ['계획형', '기차여행', '주말여행 자주'], distanceKm: 188,
   },
+];
+
+const INITIAL_POSTS = [
+  {
+    id: 'p1', category: '질문', title: 'CPR 신청 다들 언제 했어요?', body: '도착하고 바로 해야 하는지, 숙소 계약서 나오고 해야 하는지 궁금해요.',
+    meta: '코펜하겐 · 2027년 1학기', time: '8분 전', likes: 7,
+    comments: ['저는 입국하고 일주일 뒤에 했어요.', '숙소 서류 준비되면 바로 하는 게 편했어요.'],
+  },
+  {
+    id: 'p2', category: '여행메이트', title: '2월 말 스톡홀름 주말 여행 갈 사람?', body: '금요일 저녁 출발해서 일요일 밤 돌아오는 일정 생각 중이에요. 2~3명 정도 같이 가면 좋을 것 같아요.',
+    meta: '덴마크 · 2027년 1학기', time: '21분 전', likes: 12,
+    comments: ['저 관심 있어요!', '예산 어느 정도 생각하세요?'],
+  },
+  {
+    id: 'p3', category: '생활', title: '코펜하겐에서 자전거 중고로 어디서 구해요?', body: '교환 한 학기만 탈 거라 너무 비싼 건 부담돼요. 추천 루트 있나요?',
+    meta: '코펜하겐', time: '1시간 전', likes: 9, comments: ['페이스북 마켓도 많이 봐요.'],
+  },
+  {
+    id: 'p4', category: '수업', title: 'UCPH 수강신청 변경 기간 질문', body: '첫 주 수업 들어보고 바꾸는 것도 가능한가요?',
+    meta: 'University of Copenhagen', time: '2시간 전', likes: 4, comments: [],
+  },
+];
+
+const INITIAL_CHECKLIST = [
+  { id: 'c1', group: '출국 전', title: '여권 유효기간 확인', done: true },
+  { id: 'c2', group: '출국 전', title: '비자/거주허가 서류 준비', done: false },
+  { id: 'c3', group: '출국 전', title: '항공권 예약', done: false },
+  { id: 'c4', group: '주거', title: '기숙사 또는 집 계약 확인', done: false },
+  { id: 'c5', group: '학교', title: '수강신청 일정 확인', done: false },
+  { id: 'c6', group: '생활', title: '현지 유심/eSIM 준비', done: false },
+];
+
+const CHECKIN_RESPONSES = [
+  { answer: '1월 18일', count: 4 },
+  { answer: '1월 20일', count: 7 },
+  { answer: '1월 22일', count: 5 },
+  { answer: '1월 25일 이후', count: 8 },
+];
+
+const CHECKIN_MESSAGES = [
+  '저는 1월 20일 도착해요. 공항에서 시내 같이 갈 분?',
+  '1월 22일 저녁 도착인데 같은 날인 분 있나요?',
+  '저는 18일! 기숙사 입실 전날이라 하루 호텔 잡았어요.',
 ];
 
 export default function App() {
@@ -132,6 +115,20 @@ export default function App() {
   const [screen, setScreen] = useState('home');
   const [exchangeInfo, setExchangeInfo] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [posts, setPosts] = useState(INITIAL_POSTS);
+  const [selectedPostId, setSelectedPostId] = useState(null);
+  const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
+  const [checkinAnswer, setCheckinAnswer] = useState('');
+  const [profile, setProfile] = useState({
+    nickname: '보빈',
+    homeUniversity: '국민대학교',
+    showHomeUniversity: false,
+    intro: '여행, 카페, 맛집 좋아해요. 같이 돌아다닐 친구를 찾고 있어요.',
+    interests: ['여행', '카페', '맛집'],
+    style: ['계획형', '주말여행 자주'],
+  });
+
+  const goHome = () => setScreen('home');
 
   if (!started) {
     return (
@@ -150,41 +147,44 @@ export default function App() {
   }
 
   if (screen === 'register') {
-    return (
-      <ExchangeRegistrationScreen
-        initialValue={exchangeInfo}
-        onCancel={() => setScreen('home')}
-        onSave={(info) => {
-          setExchangeInfo(info);
-          setScreen('home');
-        }}
-      />
-    );
+    return <ExchangeRegistrationScreen initialValue={exchangeInfo} onCancel={goHome} onSave={(info) => { setExchangeInfo(info); goHome(); }} />;
   }
-
   if (screen === 'find') {
-    return (
-      <FindStudentsScreen
-        exchangeInfo={exchangeInfo}
-        onBack={() => setScreen('home')}
-        onRegister={() => setScreen('register')}
-        onOpenProfile={(user) => {
-          setSelectedUser(user);
-          setScreen('profile');
-        }}
-      />
-    );
+    return <FindStudentsScreen exchangeInfo={exchangeInfo} onBack={goHome} onRegister={() => setScreen('register')} onOpenProfile={(user) => { setSelectedUser(user); setScreen('profile'); }} />;
   }
-
   if (screen === 'profile' && selectedUser) {
     return <StudentProfileScreen user={selectedUser} onBack={() => setScreen('find')} />;
+  }
+  if (screen === 'community') {
+    return <CommunityScreen posts={posts} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => { setSelectedPostId(id); setScreen('postDetail'); }} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
+  }
+  if (screen === 'writePost') {
+    return <WritePostScreen onCancel={() => setScreen('community')} onSubmit={(post) => { setPosts((prev) => [{ ...post, id: `p${Date.now()}`, likes: 0, comments: [], time: '방금' }, ...prev]); setScreen('community'); }} />;
+  }
+  if (screen === 'postDetail') {
+    const post = posts.find((item) => item.id === selectedPostId);
+    return <PostDetailScreen post={post} onBack={() => setScreen('community')} onAddComment={(text) => setPosts((prev) => prev.map((item) => item.id === selectedPostId ? { ...item, comments: [...item.comments, text] } : item))} />;
+  }
+  if (screen === 'checkin') {
+    return <CheckInScreen exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={setCheckinAnswer} onBack={goHome} />;
+  }
+  if (screen === 'checklist') {
+    return <ChecklistScreen items={checklist} onBack={goHome} onToggle={(id) => setChecklist((prev) => prev.map((item) => item.id === id ? { ...item, done: !item.done } : item))} />;
+  }
+  if (screen === 'my') {
+    return <MyScreen profile={profile} exchangeInfo={exchangeInfo} onSave={setProfile} onBack={goHome} onEditExchange={() => setScreen('register')} onFind={() => setScreen('find')} onCommunity={() => setScreen('community')} />;
   }
 
   return (
     <HomeScreen
       exchangeInfo={exchangeInfo}
+      profile={profile}
       onRegister={() => setScreen('register')}
       onFind={() => setScreen('find')}
+      onCommunity={() => setScreen('community')}
+      onCheckin={() => setScreen('checkin')}
+      onChecklist={() => setScreen('checklist')}
+      onMy={() => setScreen('my')}
     />
   );
 }
@@ -194,54 +194,29 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
   const [year, setYear] = useState(initialSemester.year);
   const [term, setTerm] = useState(initialSemester.term);
   const [schoolQuery, setSchoolQuery] = useState(initialValue?.universityName || '');
-  const [selectedUniversity, setSelectedUniversity] = useState(
-    initialValue?.universityId
-      ? {
-          id: initialValue.universityId,
-          name: initialValue.universityName,
-          country: initialValue.country,
-          countryCode: initialValue.countryCode,
-          city: initialValue.city,
-          latitude: initialValue.latitude,
-          longitude: initialValue.longitude,
-        }
-      : null
-  );
+  const [selectedUniversity, setSelectedUniversity] = useState(initialValue?.universityId ? {
+    id: initialValue.universityId, name: initialValue.universityName, country: initialValue.country,
+    countryCode: initialValue.countryCode, city: initialValue.city,
+  } : null);
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
   useEffect(() => {
     const query = schoolQuery.trim();
-    if (selectedUniversity && query === selectedUniversity.name) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    if (query.length < 2) {
-      setResults([]);
-      setSearching(false);
-      setSearchError('');
-      return;
-    }
-
+    if (selectedUniversity && query === selectedUniversity.name) { setResults([]); setSearching(false); return; }
+    if (query.length < 2) { setResults([]); setSearching(false); setSearchError(''); return; }
     const timer = setTimeout(async () => {
       try {
-        setSearching(true);
-        setSearchError('');
-        const url = `https://api.ror.org/v2/organizations?query=${encodeURIComponent(query)}&filter=types:education`;
-        const response = await fetch(url);
+        setSearching(true); setSearchError('');
+        const response = await fetch(`https://api.ror.org/v2/organizations?query=${encodeURIComponent(query)}&filter=types:education`);
         if (!response.ok) throw new Error('search failed');
         const data = await response.json();
         setResults((data.items || []).slice(0, 8).map(normalizeRorOrganization));
       } catch (error) {
-        setResults([]);
-        setSearchError('대학 검색에 실패했어요. 잠시 후 다시 시도해 주세요.');
-      } finally {
-        setSearching(false);
-      }
+        setResults([]); setSearchError('대학 검색에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      } finally { setSearching(false); }
     }, 350);
-
     return () => clearTimeout(timer);
   }, [schoolQuery, selectedUniversity]);
 
@@ -249,64 +224,27 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
   const canSave = Boolean(selectedUniversity && year && term);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
+    <Screen>
       <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.formHeader}>
-          <TouchableOpacity onPress={onCancel}><Text style={styles.cancelText}>취소</Text></TouchableOpacity>
-          <Text style={styles.formTitle}>파견 정보 등록</Text>
-          <View style={{ width: 34 }} />
-        </View>
-
+        <TopHeader title="파견 정보 등록" onBack={onCancel} backLabel="취소" />
         <View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>파견 대학</Text>
-          <TextInput
-            style={styles.input}
-            value={schoolQuery}
-            onChangeText={(text) => {
-              setSchoolQuery(text);
-              if (!selectedUniversity || text !== selectedUniversity.name) setSelectedUniversity(null);
-            }}
-            placeholder="대학 이름 또는 약자를 검색하세요"
-            placeholderTextColor="#A1A7A2"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {searching && (
-            <View style={styles.searchStatusRow}>
-              <ActivityIndicator size="small" color={COLORS.green} />
-              <Text style={styles.searchStatusText}>전 세계 대학 검색 중...</Text>
-            </View>
-          )}
+          <TextInput style={styles.input} value={schoolQuery} onChangeText={(text) => { setSchoolQuery(text); if (!selectedUniversity || text !== selectedUniversity.name) setSelectedUniversity(null); }} placeholder="대학 이름 또는 약자를 검색하세요" placeholderTextColor="#A1A7A2" autoCapitalize="none" autoCorrect={false} />
+          {searching && <View style={styles.searchStatusRow}><ActivityIndicator size="small" color={COLORS.green} /><Text style={styles.searchStatusText}>전 세계 대학 검색 중...</Text></View>}
           {!!searchError && <Text style={styles.searchError}>{searchError}</Text>}
-          {results.length > 0 && (
-            <View style={styles.searchResultsBox}>
-              {results.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.searchResultItem}
-                  onPress={() => {
-                    setSelectedUniversity(item);
-                    setSchoolQuery(item.name);
-                    setResults([]);
-                  }}
-                >
-                  <Text style={styles.searchResultName}>{item.name}</Text>
-                  <Text style={styles.searchResultLocation}>{[item.city, item.country].filter(Boolean).join(', ')}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          {selectedUniversity && (
-            <View style={styles.selectedSchoolCard}>
-              <Text style={styles.selectedSchoolLabel}>선택된 대학</Text>
-              <Text style={styles.selectedSchoolName}>{selectedUniversity.name}</Text>
-              <Text style={styles.selectedSchoolLocation}>{[selectedUniversity.city, selectedUniversity.country].filter(Boolean).join(' · ')}</Text>
-              <Text style={styles.selectedSchoolId}>ROR ID · {selectedUniversity.id}</Text>
-            </View>
-          )}
+          {results.length > 0 && <View style={styles.searchResultsBox}>{results.map((item) => (
+            <TouchableOpacity key={item.id} style={styles.searchResultItem} onPress={() => { setSelectedUniversity(item); setSchoolQuery(item.name); setResults([]); }}>
+              <Text style={styles.searchResultName}>{item.name}</Text>
+              <Text style={styles.searchResultLocation}>{[item.city, item.country].filter(Boolean).join(', ')}</Text>
+            </TouchableOpacity>
+          ))}</View>}
+          {selectedUniversity && <View style={styles.selectedSchoolCard}>
+            <Text style={styles.selectedSchoolLabel}>선택된 대학</Text>
+            <Text style={styles.selectedSchoolName}>{selectedUniversity.name}</Text>
+            <Text style={styles.selectedSchoolLocation}>{[selectedUniversity.city, selectedUniversity.country].filter(Boolean).join(' · ')}</Text>
+            <Text style={styles.selectedSchoolId}>ROR ID · {selectedUniversity.id}</Text>
+          </View>}
         </View>
-
         <View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>파견 학기</Text>
           <Text style={styles.helperText}>연도와 학기를 각각 위아래로 돌려 선택하세요.</Text>
@@ -316,196 +254,71 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
           </View>
           <Text style={styles.semesterPreview}>선택: {semester}</Text>
         </View>
-
-        <TouchableOpacity
-          disabled={!canSave}
-          style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
-          onPress={() => onSave({
-            universityId: selectedUniversity.id,
-            universityName: selectedUniversity.name,
-            country: selectedUniversity.country,
-            countryCode: selectedUniversity.countryCode,
-            city: selectedUniversity.city,
-            latitude: selectedUniversity.latitude,
-            longitude: selectedUniversity.longitude,
-            semester,
-          })}
-        >
-          <Text style={styles.saveButtonText}>저장하기</Text>
-        </TouchableOpacity>
+        <PrimaryButton disabled={!canSave} label="저장하기" onPress={() => onSave({ universityId: selectedUniversity.id, universityName: selectedUniversity.name, country: selectedUniversity.country, countryCode: selectedUniversity.countryCode, city: selectedUniversity.city, semester })} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 function WheelPicker({ items, value, onChange, formatItem }) {
   const scrollRef = useRef(null);
   const currentIndex = Math.max(0, items.findIndex((item) => item === value));
-
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: currentIndex * WHEEL_ITEM_HEIGHT, animated: false });
-    });
-  }, []);
-
+  useEffect(() => { requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: currentIndex * WHEEL_ITEM_HEIGHT, animated: false })); }, []);
   const handleEnd = (event) => {
     const offset = event.nativeEvent.contentOffset.y;
     const index = Math.max(0, Math.min(items.length - 1, Math.round(offset / WHEEL_ITEM_HEIGHT)));
     onChange(items[index]);
     scrollRef.current?.scrollTo({ y: index * WHEEL_ITEM_HEIGHT, animated: true });
   };
-
   return (
     <View style={styles.wheelContainer}>
       <View pointerEvents="none" style={styles.wheelHighlight} />
-      <ScrollView
-        ref={scrollRef}
-        style={styles.wheel}
-        contentContainerStyle={styles.wheelContent}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={WHEEL_ITEM_HEIGHT}
-        decelerationRate="fast"
-        onMomentumScrollEnd={handleEnd}
-        onScrollEndDrag={handleEnd}
-      >
-        {items.map((item) => (
-          <View key={String(item)} style={styles.wheelItem}>
-            <Text style={[styles.wheelText, item === value && styles.wheelTextSelected]}>{formatItem(item)}</Text>
-          </View>
-        ))}
+      <ScrollView ref={scrollRef} style={styles.wheel} contentContainerStyle={styles.wheelContent} showsVerticalScrollIndicator={false} snapToInterval={WHEEL_ITEM_HEIGHT} decelerationRate="fast" onMomentumScrollEnd={handleEnd} onScrollEndDrag={handleEnd}>
+        {items.map((item) => <View key={String(item)} style={styles.wheelItem}><Text style={[styles.wheelText, item === value && styles.wheelTextSelected]}>{formatItem(item)}</Text></View>)}
       </ScrollView>
     </View>
   );
 }
 
 function FindStudentsScreen({ exchangeInfo, onBack, onRegister, onOpenProfile }) {
-  const [filter, setFilter] = useState('school');
+  const [filter, setFilter] = useState('same');
+  if (!exchangeInfo) return <Screen><TopHeader title="교환학생 찾기" onBack={onBack} /><View style={styles.emptyState}><Text style={styles.emptyTitle}>먼저 파견 정보를 등록해 주세요</Text><Text style={styles.emptyBody}>대학과 학기를 등록하면 같은 파견지의 사람부터 주변 교환학생까지 찾을 수 있어요.</Text><PrimaryButton label="파견 정보 등록하기" onPress={onRegister} /></View></Screen>;
 
-  if (!exchangeInfo) {
-    return (
-      <SafeAreaView style={styles.screen}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.findHeader}>
-          <TouchableOpacity onPress={onBack}><Text style={styles.cancelText}>‹ 홈</Text></TouchableOpacity>
-          <Text style={styles.formTitle}>교환학생 찾기</Text>
-          <View style={{ width: 34 }} />
-        </View>
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>먼저 파견 정보를 등록해 주세요</Text>
-          <Text style={styles.emptyBody}>같은 대학과 주변 교환학생을 찾으려면 내 파견 정보가 필요해요.</Text>
-          <TouchableOpacity style={styles.saveButton} onPress={onRegister}><Text style={styles.saveButtonText}>파견 정보 등록하기</Text></TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const sameSemester = SAMPLE_USERS.filter((user) => user.semester === exchangeInfo.semester);
-  const sameSchool = sameSemester.filter((user) => user.universityId === exchangeInfo.universityId);
-  const sameCity = sameSemester.filter((user) => user.city === exchangeInfo.city);
-  const sameCountry = sameSemester.filter((user) => user.country === exchangeInfo.country);
-  const nearby = sameSemester.filter((user) => {
-    if (!Number.isFinite(exchangeInfo.latitude) || !Number.isFinite(exchangeInfo.longitude)) return user.city === exchangeInfo.city;
-    if (!Number.isFinite(user.latitude) || !Number.isFinite(user.longitude)) return false;
-    return distanceKm(exchangeInfo.latitude, exchangeInfo.longitude, user.latitude, user.longitude) <= NEARBY_KM;
-  });
-
+  const semesterUsers = SAMPLE_USERS.filter((user) => user.semester === exchangeInfo.semester);
   const groups = {
-    school: sameSchool,
-    city: sameCity,
-    nearby,
-    country: sameCountry,
+    same: semesterUsers.filter((user) => user.universityId === exchangeInfo.universityId),
+    city: semesterUsers.filter((user) => user.city === exchangeInfo.city || user.city === 'Frederiksberg'),
+    nearby: semesterUsers.filter((user) => user.country === exchangeInfo.country && user.distanceKm <= 30),
+    country: semesterUsers.filter((user) => user.country === exchangeInfo.country),
   };
-  const users = groups[filter] || [];
-
-  const filterLabels = [
-    ['school', `같은 대학 ${sameSchool.length}`],
-    ['city', `같은 도시 ${sameCity.length}`],
-    ['nearby', `내 주변 ${nearby.length}`],
-    ['country', `같은 국가 ${sameCountry.length}`],
+  const users = groups[filter];
+  const tabs = [
+    ['same', `같은 대학 ${groups.same.length}`], ['city', `같은 도시 ${groups.city.length}`], ['nearby', `내 주변 ${groups.nearby.length}`], ['country', `같은 국가 ${groups.country.length}`],
   ];
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.findHeader}>
-        <TouchableOpacity onPress={onBack}><Text style={styles.cancelText}>‹ 홈</Text></TouchableOpacity>
-        <Text style={styles.formTitle}>교환학생 찾기</Text>
-        <View style={{ width: 34 }} />
-      </View>
+    <Screen>
+      <TopHeader title="교환학생 찾기" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.findContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.matchSummary}>
-          <Text style={styles.matchSummaryTitle}>{exchangeInfo.universityName}</Text>
-          <Text style={styles.matchSummaryMeta}>{exchangeInfo.city} · {exchangeInfo.semester}</Text>
-        </View>
-
-        {sameSchool.length <= 1 && nearby.length > sameSchool.length && (
-          <View style={styles.expandNotice}>
-            <Text style={styles.expandNoticeTitle}>같은 학교 사람이 아직 적어요</Text>
-            <Text style={styles.expandNoticeBody}>그래서 {NEARBY_KM}km 안의 주변 대학 교환학생 {nearby.length}명도 함께 찾을 수 있게 열어뒀어요.</Text>
-            <TouchableOpacity onPress={() => setFilter('nearby')}>
-              <Text style={styles.expandNoticeLink}>주변 사람 보기 →</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {filterLabels.map(([key, label]) => (
-            <TouchableOpacity
-              key={key}
-              style={[styles.filterChip, filter === key && styles.filterChipActive]}
-              onPress={() => setFilter(key)}
-            >
-              <Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
+        <View style={styles.matchSummary}><Text style={styles.matchSummaryTitle}>{exchangeInfo.universityName}</Text><Text style={styles.matchSummaryMeta}>{exchangeInfo.city} · {exchangeInfo.semester}</Text></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>{tabs.map(([key, label]) => <TouchableOpacity key={key} style={[styles.filterChip, filter === key && styles.filterChipActive]} onPress={() => setFilter(key)}><Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>{label}</Text></TouchableOpacity>)}</ScrollView>
+        {groups.same.length < 3 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>같은 학교 사람이 아직 적어요</Text><Text style={styles.noticeBody}>같은 도시나 주변 30km로 넓히면 다른 대학 교환학생도 만날 수 있어요.</Text></View>}
         <Text style={styles.resultCount}>{users.length}명 찾았어요</Text>
-        {users.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>아직 이 범위에는 사람이 없어요</Text>
-            <Text style={styles.emptyBody}>위 필터에서 범위를 조금 넓혀보세요.</Text>
-          </View>
-        ) : (
-          users.map((user) => (
-            <StudentCard
-              key={user.id}
-              user={user}
-              exchangeInfo={exchangeInfo}
-              onPress={() => onOpenProfile(user)}
-            />
-          ))
-        )}
-        <Text style={styles.prototypeNote}>사람찾기 정보만 서로 보여주고, 커뮤니티 활동은 이 프로필과 연결하지 않는 구조로 갈 거예요.</Text>
+        {users.map((user) => <StudentCard key={user.id} user={user} reason={getMatchReason(user, exchangeInfo)} onPress={() => onOpenProfile(user)} />)}
+        <Text style={styles.prototypeNote}>사람찾기 정보와 익명 커뮤니티 활동은 서로 연결되지 않아요.</Text>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
-function StudentCard({ user, exchangeInfo, onPress }) {
-  const distance = Number.isFinite(exchangeInfo?.latitude) && Number.isFinite(exchangeInfo?.longitude)
-    ? Math.round(distanceKm(exchangeInfo.latitude, exchangeInfo.longitude, user.latitude, user.longitude))
-    : null;
-  const matchReason = user.universityId === exchangeInfo.universityId
-    ? '같은 대학'
-    : user.city === exchangeInfo.city
-      ? '같은 도시'
-      : distance !== null && distance <= NEARBY_KM
-        ? `약 ${distance}km`
-        : '같은 국가';
-
+function StudentCard({ user, reason, onPress }) {
   return (
     <TouchableOpacity activeOpacity={0.8} style={styles.studentCard} onPress={onPress}>
       <View style={styles.studentInfo}>
-        <View style={styles.studentTopRow}>
-          <Text style={styles.studentName}>{user.nickname}</Text>
-          <Text style={styles.reasonBadge}>{matchReason}</Text>
-        </View>
+        <View style={styles.inlineRow}><Text style={styles.studentName}>{user.nickname}</Text><Text style={styles.reasonBadge}>{reason}</Text></View>
         {user.showHomeUniversity && <Text style={styles.homeUniversity}>한국 대학 · {user.homeUniversity}</Text>}
         <Text style={styles.studentIntro}>{user.intro}</Text>
-        <View style={styles.miniInterestWrap}>
-          {user.interests.slice(0, 3).map((item) => <Text key={item} style={styles.miniInterest}>#{item}</Text>)}
-        </View>
+        <View style={styles.miniInterestWrap}>{user.interests.slice(0, 3).map((item) => <Text key={item} style={styles.miniInterest}>#{item}</Text>)}</View>
         <Text style={styles.studentMeta}>{user.universityName} · {user.city} · {user.semester}</Text>
       </View>
       <Text style={styles.studentArrow}>›</Text>
@@ -515,183 +328,172 @@ function StudentCard({ user, exchangeInfo, onPress }) {
 
 function StudentProfileScreen({ user, onBack }) {
   const [requested, setRequested] = useState(false);
-  const [messagePressed, setMessagePressed] = useState(false);
-
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.findHeader}>
-        <TouchableOpacity onPress={onBack}><Text style={styles.cancelText}>‹ 찾기</Text></TouchableOpacity>
-        <Text style={styles.formTitle}>프로필</Text>
-        <View style={{ width: 34 }} />
-      </View>
+    <Screen>
+      <TopHeader title="프로필" onBack={onBack} backLabel="‹ 찾기" />
       <ScrollView contentContainerStyle={styles.profileContent} showsVerticalScrollIndicator={false}>
         <View style={styles.profileHero}>
           <Text style={styles.profileName}>{user.nickname}</Text>
-          {user.showHomeUniversity && <Text style={styles.profileHomeUniversity}>{user.homeUniversity}</Text>}
-          <Text style={styles.profilePrivacy}>사람찾기에서만 공개되는 프로필</Text>
+          <Text style={styles.profilePrivacy}>사람찾기용 공개 프로필</Text>
           <Text style={styles.profileIntro}>{user.intro}</Text>
         </View>
-
-        <View style={styles.profileSection}>
-          <Text style={styles.profileSectionTitle}>관심사</Text>
-          <View style={styles.interestWrap}>
-            {user.interests.map((interest) => (
-              <View key={interest} style={styles.interestChip}><Text style={styles.interestChipText}>{interest}</Text></View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.profileSection}>
-          <Text style={styles.profileSectionTitle}>여행 · 교환생활 스타일</Text>
-          <View style={styles.interestWrap}>
-            {user.style.map((item) => (
-              <View key={item} style={styles.styleChip}><Text style={styles.styleChipText}>{item}</Text></View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.profileSection}>
-          <Text style={styles.profileSectionTitle}>교환 정보</Text>
+        <ProfileSection title="관심사"><TagList items={user.interests} filled /></ProfileSection>
+        <ProfileSection title="여행 · 교환생활 스타일"><TagList items={user.style} /></ProfileSection>
+        <ProfileSection title="교환 정보">
           <ProfileRow label="파견 대학" value={user.universityName} />
           <ProfileRow label="파견 지역" value={[user.city, user.country].filter(Boolean).join(', ')} />
           <ProfileRow label="파견 학기" value={user.semester} />
           {user.showHomeUniversity && <ProfileRow label="한국 대학" value={user.homeUniversity} />}
-        </View>
-
-        <View style={styles.privacyNotice}>
-          <Text style={styles.privacyNoticeTitle}>익명 커뮤니티와는 완전히 분리돼요</Text>
-          <Text style={styles.privacyNoticeBody}>이 프로필은 사람찾기에서만 사용하고, 커뮤니티 글·댓글·체크인 활동에서는 사용자 프로필을 노출하지 않는 구조로 만들어요.</Text>
-        </View>
-
+        </ProfileSection>
+        <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>익명 커뮤니티와는 완전히 분리돼요</Text><Text style={styles.privacyNoticeBody}>이 화면의 정보는 사람찾기에서만 보이며, 커뮤니티 글과 댓글로는 이 프로필을 찾을 수 없어요.</Text></View>
         <View style={styles.profileActionRow}>
-          <TouchableOpacity style={[styles.profileActionButton, requested && styles.profileActionButtonDone]} onPress={() => setRequested((value) => !value)}>
-            <Text style={[styles.profileActionText, requested && styles.profileActionTextDone]}>{requested ? '요청 보냄' : '친구추가'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileMessageButton} onPress={() => setMessagePressed(true)}>
-            <Text style={styles.profileMessageButtonText}>{messagePressed ? '채팅 준비 중' : '메시지'}</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={[styles.profileActionButton, requested && styles.profileActionButtonDone]} onPress={() => setRequested((v) => !v)}><Text style={styles.profileActionText}>{requested ? '요청 보냄' : '친구추가'}</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.profileMessageButton}><Text style={styles.profileMessageButtonText}>메시지</Text></TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
-function ProfileRow({ label, value }) {
+function CommunityScreen({ posts, onHome, onWrite, onOpen, onMy, onFind }) {
+  const [category, setCategory] = useState('전체');
+  const categories = ['전체', '질문', '생활', '수업', '여행메이트'];
+  const visible = category === '전체' ? posts : posts.filter((post) => post.category === category);
   return (
-    <View style={styles.profileRow}>
-      <Text style={styles.profileRowLabel}>{label}</Text>
-      <Text style={styles.profileRowValue}>{value}</Text>
-    </View>
+    <Screen>
+      <View style={styles.communityHeader}><View><Text style={styles.miniBrand}>교환점</Text><Text style={styles.pageTitle}>익명 커뮤니티</Text></View><TouchableOpacity style={styles.writeButton} onPress={onWrite}><Text style={styles.writeButtonText}>글쓰기</Text></TouchableOpacity></View>
+      <ScrollView contentContainerStyle={styles.communityContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.anonymousBanner}><Text style={styles.anonymousTitle}>완전 익명으로 이야기해요</Text><Text style={styles.anonymousBody}>사람찾기 프로필과 연결되지 않고, 게시글에서 개인 프로필로 이동할 수도 없어요.</Text></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>{categories.map((item) => <TouchableOpacity key={item} onPress={() => setCategory(item)} style={[styles.filterChip, category === item && styles.filterChipActive]}><Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text></TouchableOpacity>)}</ScrollView>
+        {visible.map((post) => <TouchableOpacity key={post.id} style={styles.communityPost} onPress={() => onOpen(post.id)}>
+          <View style={styles.inlineRow}><Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postTime}>{post.time}</Text></View>
+          <Text style={styles.postTitle}>{post.title}</Text><Text numberOfLines={2} style={styles.postBody}>{post.body}</Text>
+          <Text style={styles.postMeta}>익명 · {post.meta} · 공감 {post.likes} · 댓글 {post.comments.length}</Text>
+        </TouchableOpacity>)}
+      </ScrollView>
+      <BottomNav active="community" onHome={onHome} onFind={onFind} onCommunity={() => {}} onMy={onMy} />
+    </Screen>
   );
 }
 
-function HomeScreen({ exchangeInfo, onRegister, onFind }) {
+function WritePostScreen({ onCancel, onSubmit }) {
+  const [category, setCategory] = useState('질문');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.miniBrand}>교환점</Text>
-            <Text style={styles.hello}>안녕하세요 👋</Text>
-          </View>
-        </View>
-        <View style={styles.destinationCard}>
-          <Text style={styles.cardEyebrow}>MY EXCHANGE</Text>
-          {exchangeInfo ? (
-            <>
-              <Text style={styles.destinationTitle}>{exchangeInfo.city ? `${exchangeInfo.city} · ` : ''}{exchangeInfo.universityName}</Text>
-              <Text style={styles.destinationBody}>{exchangeInfo.country} · {exchangeInfo.semester}</Text>
-              <TouchableOpacity style={styles.registerButton} onPress={onRegister}><Text style={styles.registerButtonText}>파견 정보 수정하기</Text></TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={styles.destinationTitle}>아직 파견 정보를 등록하지 않았어요</Text>
-              <Text style={styles.destinationBody}>대학과 학기를 등록하면 같은 파견지와 주변 대학의 교환학생을 찾을 수 있어요.</Text>
-              <TouchableOpacity style={styles.registerButton} onPress={onRegister}><Text style={styles.registerButtonText}>파견 정보 등록하기</Text></TouchableOpacity>
-            </>
-          )}
-        </View>
-        <Text style={styles.sectionTitle}>교환점에서 뭐 할까?</Text>
-        <View style={styles.grid}>
-          <QuickCard icon="✈️" title="교환학생 찾기" subtitle="같은 대학부터 주변 대학까지" onPress={onFind} />
-          <QuickCard icon="💬" title="커뮤니티" subtitle="완전 익명으로 질문하고 정보 나누기" />
-          <QuickCard icon="✓" title="준비 체크" subtitle="비자 · 서류 · 출국 준비" />
-          <QuickCard icon="◎" title="체크인" subtitle="답하고 같은 기수 현황 보기" />
-        </View>
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>지금 많이 찾는 이야기</Text>
-          <Text style={styles.moreText}>전체보기</Text>
-        </View>
-        <View style={styles.postCard}>
-          <Text style={styles.postBadge}>익명 · 여행메이트</Text>
-          <Text style={styles.postTitle}>코펜하겐에서 같이 여행 갈 사람?</Text>
-          <Text style={styles.postMeta}>덴마크 · 2027년 1학기 · 방금</Text>
-        </View>
-      </ScrollView>
-      <View style={styles.bottomNav}>
-        <NavItem label="홈" icon="⌂" active />
-        <NavItem label="찾기" icon="⌕" onPress={onFind} />
-        <NavItem label="커뮤니티" icon="◫" />
-        <NavItem label="마이" icon="○" />
+    <Screen><ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled"><TopHeader title="익명 글쓰기" onBack={onCancel} backLabel="취소" />
+      <Text style={styles.fieldLabel}>카테고리</Text><View style={[styles.filterRow, { flexWrap: 'wrap' }]}>{['질문', '생활', '수업', '여행메이트'].map((item) => <TouchableOpacity key={item} style={[styles.filterChip, category === item && styles.filterChipActive]} onPress={() => setCategory(item)}><Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text></TouchableOpacity>)}</View>
+      <Text style={styles.fieldLabel}>제목</Text><TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="제목을 입력하세요" placeholderTextColor="#A1A7A2" />
+      <Text style={[styles.fieldLabel, { marginTop: 18 }]}>내용</Text><TextInput style={styles.textArea} value={body} onChangeText={setBody} placeholder="익명으로 자유롭게 물어보세요" placeholderTextColor="#A1A7A2" multiline textAlignVertical="top" />
+      <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>이 글은 사람찾기 프로필과 연결되지 않아요</Text><Text style={styles.privacyNoticeBody}>닉네임, 한국 대학, 파견 프로필은 게시글에 노출되지 않습니다.</Text></View>
+      <PrimaryButton disabled={!title.trim() || !body.trim()} label="익명으로 올리기" onPress={() => onSubmit({ category, title: title.trim(), body: body.trim(), meta: '내 파견 커뮤니티' })} />
+    </ScrollView></Screen>
+  );
+}
+
+function PostDetailScreen({ post, onBack, onAddComment }) {
+  const [comment, setComment] = useState('');
+  if (!post) return <Screen><TopHeader title="게시글" onBack={onBack} /><View style={styles.emptyState}><Text>게시글을 찾을 수 없어요.</Text></View></Screen>;
+  return (
+    <Screen><TopHeader title="게시글" onBack={onBack} backLabel="‹ 커뮤니티" /><ScrollView contentContainerStyle={styles.postDetailContent} keyboardShouldPersistTaps="handled">
+      <Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postDetailTitle}>{post.title}</Text><Text style={styles.postDetailMeta}>익명 · {post.meta} · {post.time}</Text><Text style={styles.postDetailBody}>{post.body}</Text>
+      <Text style={styles.commentHeader}>댓글 {post.comments.length}</Text>
+      {post.comments.map((item, index) => <View key={`${item}-${index}`} style={styles.commentCard}><Text style={styles.commentAuthor}>익명{index + 1}</Text><Text style={styles.commentText}>{item}</Text></View>)}
+      <View style={styles.commentInputRow}><TextInput style={styles.commentInput} value={comment} onChangeText={setComment} placeholder="익명 댓글 입력" placeholderTextColor="#A1A7A2" /><TouchableOpacity style={styles.commentSend} onPress={() => { if (!comment.trim()) return; onAddComment(comment.trim()); setComment(''); }}><Text style={styles.commentSendText}>등록</Text></TouchableOpacity></View>
+    </ScrollView></Screen>
+  );
+}
+
+function CheckInScreen({ exchangeInfo, answer, onAnswer, onBack }) {
+  const [draft, setDraft] = useState(answer);
+  const revealed = Boolean(answer);
+  return (
+    <Screen><TopHeader title="체크인 방" onBack={onBack} /><ScrollView contentContainerStyle={styles.checkinContent}>
+      <View style={styles.roomCard}><Text style={styles.cardEyebrowDark}>MY EXCHANGE ROOM</Text><Text style={styles.roomTitle}>{exchangeInfo ? `${exchangeInfo.city} · ${exchangeInfo.semester}` : '파견 정보를 등록하면 자동으로 방이 생겨요'}</Text><Text style={styles.roomMeta}>같은 시기 교환학생 142명 · 익명 참여</Text></View>
+      <Text style={styles.checkinLabel}>오늘의 체크인</Text><Text style={styles.checkinQuestion}>✈️ 출국 예정일이 언제예요?</Text><Text style={styles.checkinGuide}>내 답을 제출해야 다른 사람의 답을 볼 수 있어요.</Text>
+      {!revealed ? <>
+        <TextInput style={styles.input} value={draft} onChangeText={setDraft} placeholder="예: 1월 22일" placeholderTextColor="#A1A7A2" />
+        <PrimaryButton disabled={!draft.trim()} label="답변하고 다른 사람 답 보기" onPress={() => onAnswer(draft.trim())} />
+      </> : <>
+        <View style={styles.myAnswer}><Text style={styles.myAnswerLabel}>내 답변</Text><Text style={styles.myAnswerText}>{answer}</Text></View>
+        <Text style={styles.sectionTitle}>다른 사람들은 이렇게 답했어요</Text>
+        {CHECKIN_RESPONSES.map((item) => <View key={item.answer} style={styles.answerRow}><Text style={styles.answerLabel}>{item.answer}</Text><View style={styles.answerBarTrack}><View style={[styles.answerBarFill, { width: `${Math.min(100, item.count * 8)}%` }]} /></View><Text style={styles.answerCount}>{item.count}명</Text></View>)}
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>익명 대화</Text>{CHECKIN_MESSAGES.map((message, index) => <View key={message} style={styles.roomMessage}><Text style={styles.commentAuthor}>익명{index + 1}</Text><Text style={styles.commentText}>{message}</Text></View>)}
+      </>}
+    </ScrollView></Screen>
+  );
+}
+
+function ChecklistScreen({ items, onBack, onToggle }) {
+  const done = items.filter((item) => item.done).length;
+  const groups = [...new Set(items.map((item) => item.group))];
+  return (
+    <Screen><TopHeader title="준비 체크" onBack={onBack} /><ScrollView contentContainerStyle={styles.checklistContent}>
+      <View style={styles.progressCard}><Text style={styles.progressTitle}>출국 준비 {done}/{items.length}</Text><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(done / items.length) * 100}%` }]} /></View></View>
+      {groups.map((group) => <View key={group}><Text style={styles.checkGroup}>{group}</Text>{items.filter((item) => item.group === group).map((item) => <TouchableOpacity key={item.id} style={styles.checkItem} onPress={() => onToggle(item.id)}><View style={[styles.checkBox, item.done && styles.checkBoxDone]}><Text style={styles.checkMark}>{item.done ? '✓' : ''}</Text></View><Text style={[styles.checkText, item.done && styles.checkTextDone]}>{item.title}</Text></TouchableOpacity>)}</View>)}
+    </ScrollView></Screen>
+  );
+}
+
+function MyScreen({ profile, exchangeInfo, onSave, onBack, onEditExchange, onFind, onCommunity }) {
+  const [draft, setDraft] = useState({ ...profile, interestsText: profile.interests.join(', '), styleText: profile.style.join(', ') });
+  const save = () => onSave({ nickname: draft.nickname.trim() || '익명 교환학생', homeUniversity: draft.homeUniversity.trim(), showHomeUniversity: draft.showHomeUniversity, intro: draft.intro.trim(), interests: splitTags(draft.interestsText), style: splitTags(draft.styleText) });
+  return (
+    <Screen><TopHeader title="마이" onBack={onBack} /><ScrollView contentContainerStyle={styles.myContent} keyboardShouldPersistTaps="handled">
+      <View style={styles.mySection}><Text style={styles.profileSectionTitle}>사람찾기 공개 프로필</Text><Text style={styles.helperText}>이 정보는 사람찾기에서만 사용돼요. 익명 커뮤니티와 연결되지 않습니다.</Text>
+        <Field label="닉네임"><TextInput style={styles.input} value={draft.nickname} onChangeText={(v) => setDraft({ ...draft, nickname: v })} /></Field>
+        <Field label="한줄소개"><TextInput style={styles.textAreaSmall} multiline value={draft.intro} onChangeText={(v) => setDraft({ ...draft, intro: v })} /></Field>
+        <Field label="관심사 (쉼표로 구분)"><TextInput style={styles.input} value={draft.interestsText} onChangeText={(v) => setDraft({ ...draft, interestsText: v })} /></Field>
+        <Field label="여행/생활 스타일 (쉼표로 구분)"><TextInput style={styles.input} value={draft.styleText} onChangeText={(v) => setDraft({ ...draft, styleText: v })} /></Field>
       </View>
-    </SafeAreaView>
+      <View style={styles.mySection}><Text style={styles.profileSectionTitle}>한국 대학 공개</Text><TextInput style={styles.input} value={draft.homeUniversity} onChangeText={(v) => setDraft({ ...draft, homeUniversity: v })} placeholder="한국 소속 대학" placeholderTextColor="#A1A7A2" />
+        <TouchableOpacity style={styles.toggleRow} onPress={() => setDraft({ ...draft, showHomeUniversity: !draft.showHomeUniversity })}><Text style={styles.toggleLabel}>사람찾기에서 한국 대학 공개</Text><View style={[styles.toggle, draft.showHomeUniversity && styles.toggleOn]}><View style={[styles.toggleDot, draft.showHomeUniversity && styles.toggleDotOn]} /></View></TouchableOpacity>
+      </View>
+      <PrimaryButton label="프로필 저장" onPress={save} />
+      <View style={styles.mySection}><Text style={styles.profileSectionTitle}>내 파견 정보</Text>{exchangeInfo ? <><ProfileRow label="대학" value={exchangeInfo.universityName} /><ProfileRow label="학기" value={exchangeInfo.semester} /><SecondaryButton label="파견 정보 수정" onPress={onEditExchange} /></> : <SecondaryButton label="파견 정보 등록" onPress={onEditExchange} />}</View>
+      <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>수집하지 않는 정보</Text><Text style={styles.privacyNoticeBody}>프로필 사진과 SNS는 교환점 프로필에 저장하지 않는 방향으로 잡았어요.</Text></View>
+    </ScrollView><BottomNav active="my" onHome={onBack} onFind={onFind} onCommunity={onCommunity} onMy={() => {}} /></Screen>
   );
 }
 
-function QuickCard({ icon, title, subtitle, onPress }) {
+function HomeScreen({ exchangeInfo, profile, onRegister, onFind, onCommunity, onCheckin, onChecklist, onMy }) {
   return (
-    <TouchableOpacity activeOpacity={0.82} style={styles.quickCard} onPress={onPress}>
-      <View style={styles.quickIconWrap}><Text style={styles.quickIcon}>{icon}</Text></View>
-      <Text style={styles.quickTitle}>{title}</Text>
-      <Text style={styles.quickSubtitle}>{subtitle}</Text>
-    </TouchableOpacity>
+    <Screen><ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.header}><View><Text style={styles.miniBrand}>교환점</Text><Text style={styles.hello}>{profile.nickname}님, 안녕하세요 👋</Text></View></View>
+      <View style={styles.destinationCard}><Text style={styles.cardEyebrow}>MY EXCHANGE</Text>{exchangeInfo ? <><Text style={styles.destinationTitle}>{exchangeInfo.city ? `${exchangeInfo.city} · ` : ''}{exchangeInfo.universityName}</Text><Text style={styles.destinationBody}>{exchangeInfo.country} · {exchangeInfo.semester}</Text><TouchableOpacity style={styles.registerButton} onPress={onRegister}><Text style={styles.registerButtonText}>파견 정보 수정하기</Text></TouchableOpacity></> : <><Text style={styles.destinationTitle}>아직 파견 정보를 등록하지 않았어요</Text><Text style={styles.destinationBody}>대학과 학기를 등록하면 같은 파견지의 사람과 정보를 바로 찾을 수 있어요.</Text><TouchableOpacity style={styles.registerButton} onPress={onRegister}><Text style={styles.registerButtonText}>파견 정보 등록하기</Text></TouchableOpacity></>}</View>
+      <Text style={styles.sectionTitle}>교환점에서 뭐 할까?</Text>
+      <View style={styles.grid}>
+        <QuickCard icon="✈️" title="교환학생 찾기" subtitle="학교 · 도시 · 주변 · 국가" onPress={onFind} />
+        <QuickCard icon="💬" title="익명 커뮤니티" subtitle="질문하고 정보 나누기" onPress={onCommunity} />
+        <QuickCard icon="◉" title="체크인 방" subtitle="답하고 같은 기수 현황 보기" onPress={onCheckin} />
+        <QuickCard icon="✓" title="준비 체크" subtitle="비자 · 서류 · 출국 준비" onPress={onChecklist} />
+      </View>
+      <View style={styles.sectionRow}><Text style={styles.sectionTitle}>지금 많이 찾는 이야기</Text><TouchableOpacity onPress={onCommunity}><Text style={styles.moreText}>전체보기</Text></TouchableOpacity></View>
+      <TouchableOpacity style={styles.postCard} onPress={onCommunity}><Text style={styles.postBadge}>익명 · 여행메이트</Text><Text style={styles.postTitle}>코펜하겐에서 같이 여행 갈 사람?</Text><Text style={styles.postMeta}>덴마크 · 2027년 1학기 · 방금</Text></TouchableOpacity>
+    </ScrollView><BottomNav active="home" onHome={() => {}} onFind={onFind} onCommunity={onCommunity} onMy={onMy} /></Screen>
   );
 }
 
-function NavItem({ label, icon, active = false, onPress }) {
-  return (
-    <TouchableOpacity style={styles.navItem} activeOpacity={0.8} onPress={onPress}>
-      <Text style={[styles.navIcon, active && styles.navActive]}>{icon}</Text>
-      <Text style={[styles.navLabel, active && styles.navActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
+function Screen({ children }) { return <SafeAreaView style={styles.screen}><StatusBar barStyle="dark-content" />{children}</SafeAreaView>; }
+function TopHeader({ title, onBack, backLabel = '‹ 홈' }) { return <View style={styles.findHeader}><TouchableOpacity onPress={onBack}><Text style={styles.cancelText}>{backLabel}</Text></TouchableOpacity><Text style={styles.formTitle}>{title}</Text><View style={{ width: 48 }} /></View>; }
+function PrimaryButton({ label, onPress, disabled = false }) { return <TouchableOpacity disabled={disabled} style={[styles.saveButton, disabled && styles.saveButtonDisabled]} onPress={onPress}><Text style={styles.saveButtonText}>{label}</Text></TouchableOpacity>; }
+function SecondaryButton({ label, onPress }) { return <TouchableOpacity style={styles.secondaryButton} onPress={onPress}><Text style={styles.secondaryButtonText}>{label}</Text></TouchableOpacity>; }
+function Field({ label, children }) { return <View style={{ marginTop: 14 }}><Text style={styles.fieldLabel}>{label}</Text>{children}</View>; }
+function ProfileSection({ title, children }) { return <View style={styles.profileSection}><Text style={styles.profileSectionTitle}>{title}</Text>{children}</View>; }
+function TagList({ items, filled = false }) { return <View style={styles.interestWrap}>{items.map((item) => <View key={item} style={filled ? styles.interestChip : styles.styleChip}><Text style={filled ? styles.interestChipText : styles.styleChipText}>{item}</Text></View>)}</View>; }
+function ProfileRow({ label, value }) { return <View style={styles.profileRow}><Text style={styles.profileRowLabel}>{label}</Text><Text style={styles.profileRowValue}>{value}</Text></View>; }
+function QuickCard({ icon, title, subtitle, onPress }) { return <TouchableOpacity activeOpacity={0.82} style={styles.quickCard} onPress={onPress}><View style={styles.quickIconWrap}><Text style={styles.quickIcon}>{icon}</Text></View><Text style={styles.quickTitle}>{title}</Text><Text style={styles.quickSubtitle}>{subtitle}</Text></TouchableOpacity>; }
+function BottomNav({ active, onHome, onFind, onCommunity, onMy }) { return <View style={styles.bottomNav}><NavItem label="홈" icon="⌂" active={active === 'home'} onPress={onHome} /><NavItem label="찾기" icon="⌕" active={active === 'find'} onPress={onFind} /><NavItem label="커뮤니티" icon="◫" active={active === 'community'} onPress={onCommunity} /><NavItem label="마이" icon="○" active={active === 'my'} onPress={onMy} /></View>; }
+function NavItem({ label, icon, active, onPress }) { return <TouchableOpacity style={styles.navItem} onPress={onPress}><Text style={[styles.navIcon, active && styles.navActive]}>{icon}</Text><Text style={[styles.navLabel, active && styles.navActive]}>{label}</Text></TouchableOpacity>; }
 
 function normalizeRorOrganization(item) {
   const displayName = item.names?.find((name) => name.types?.includes('ror_display'))?.value || item.names?.[0]?.value || '이름 없는 기관';
   const location = item.locations?.[0]?.geonames_details || {};
-  return {
-    id: item.id,
-    name: displayName,
-    city: location.name || '',
-    country: location.country_name || '',
-    countryCode: location.country_code || '',
-    latitude: Number(location.lat),
-    longitude: Number(location.lng),
-  };
+  return { id: item.id, name: displayName, city: location.name || '', country: location.country_name || '', countryCode: location.country_code || '' };
 }
-
-function distanceKm(lat1, lon1, lat2, lon2) {
-  if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Infinity;
-  const toRad = (value) => value * Math.PI / 180;
-  const earth = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function parseSemester(value) {
-  const match = typeof value === 'string' ? value.match(/^(\d{4})년\s(.+)$/) : null;
-  const parsedYear = Number(match?.[1]);
-  const parsedTerm = match?.[2];
-  return {
-    year: YEARS.includes(parsedYear) ? parsedYear : 2027,
-    term: TERMS.includes(parsedTerm) ? parsedTerm : '1학기',
-  };
-}
+function parseSemester(value) { const match = typeof value === 'string' ? value.match(/^(\d{4})년\s(.+)$/) : null; const parsedYear = Number(match?.[1]); const parsedTerm = match?.[2]; return { year: YEARS.includes(parsedYear) ? parsedYear : 2027, term: TERMS.includes(parsedTerm) ? parsedTerm : '1학기' }; }
+function getMatchReason(user, exchangeInfo) { if (user.universityId === exchangeInfo.universityId) return '같은 대학'; if (user.city === exchangeInfo.city) return '같은 도시'; if (user.distanceKm <= 30) return `약 ${user.distanceKm}km`; return '같은 국가'; }
+function splitTags(value) { return value.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 8); }
 
 const styles = StyleSheet.create({
   introScreen: { flex: 1, backgroundColor: COLORS.background, paddingHorizontal: 28, paddingBottom: 26 },
@@ -703,11 +505,12 @@ const styles = StyleSheet.create({
   startButtonText: { color: COLORS.white, fontSize: 17, fontWeight: '700' },
   screen: { flex: 1, backgroundColor: COLORS.background },
   scrollContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 112 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
+  header: { marginBottom: 22 },
   miniBrand: { fontSize: 15, fontWeight: '800', color: COLORS.green, marginBottom: 5 },
   hello: { fontSize: 26, fontWeight: '800', color: COLORS.text, letterSpacing: -0.8 },
   destinationCard: { backgroundColor: COLORS.green, borderRadius: 24, padding: 22, marginBottom: 28 },
   cardEyebrow: { color: '#DCE8DE', fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10 },
+  cardEyebrowDark: { color: COLORS.green, fontSize: 11, fontWeight: '800', letterSpacing: 1.1, marginBottom: 8 },
   destinationTitle: { color: COLORS.white, fontSize: 21, fontWeight: '800', lineHeight: 29 },
   destinationBody: { color: '#E2EBE4', marginTop: 10, fontSize: 14, lineHeight: 21 },
   registerButton: { alignSelf: 'flex-start', marginTop: 18, backgroundColor: COLORS.white, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 14 },
@@ -723,7 +526,7 @@ const styles = StyleSheet.create({
   moreText: { color: COLORS.green, fontSize: 12, fontWeight: '700' },
   postCard: { backgroundColor: COLORS.surface, borderRadius: 18, padding: 17, marginBottom: 10, borderWidth: 1, borderColor: COLORS.line },
   postBadge: { alignSelf: 'flex-start', color: COLORS.green, backgroundColor: COLORS.greenSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10, fontSize: 11, fontWeight: '800', marginBottom: 10 },
-  postTitle: { color: COLORS.text, fontSize: 15, fontWeight: '700', lineHeight: 21 },
+  postTitle: { color: COLORS.text, fontSize: 15, fontWeight: '800', lineHeight: 21 },
   postMeta: { marginTop: 7, color: COLORS.subtext, fontSize: 11 },
   bottomNav: { position: 'absolute', left: 14, right: 14, bottom: 10, height: 72, borderRadius: 24, backgroundColor: COLORS.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderWidth: 1, borderColor: COLORS.line },
   navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
@@ -731,13 +534,15 @@ const styles = StyleSheet.create({
   navLabel: { color: '#9AA19C', fontSize: 11, fontWeight: '700' },
   navActive: { color: COLORS.green },
   formContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 },
-  formHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 30 },
+  findHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
   formTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text },
   cancelText: { fontSize: 15, color: COLORS.green, fontWeight: '700' },
   fieldWrap: { marginBottom: 22 },
   fieldLabel: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
-  helperText: { color: COLORS.subtext, fontSize: 12, marginBottom: 10 },
+  helperText: { color: COLORS.subtext, fontSize: 12, lineHeight: 18, marginBottom: 10 },
   input: { height: 52, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, paddingHorizontal: 15, fontSize: 15, color: COLORS.text },
+  textArea: { minHeight: 170, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, padding: 15, fontSize: 15, color: COLORS.text },
+  textAreaSmall: { minHeight: 88, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, padding: 15, fontSize: 15, color: COLORS.text },
   searchStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
   searchStatusText: { color: COLORS.subtext, fontSize: 12 },
   searchError: { color: '#A34A4A', fontSize: 12, marginTop: 8 },
@@ -754,51 +559,49 @@ const styles = StyleSheet.create({
   wheelContainer: { flex: 1, height: WHEEL_ITEM_HEIGHT * 3, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, backgroundColor: COLORS.surface, overflow: 'hidden' },
   wheel: { flex: 1 },
   wheelContent: { paddingVertical: WHEEL_ITEM_HEIGHT },
-  wheelHighlight: { position: 'absolute', left: 6, right: 6, top: WHEEL_ITEM_HEIGHT, height: WHEEL_ITEM_HEIGHT, borderRadius: 10, backgroundColor: COLORS.greenSoft, zIndex: 0 },
+  wheelHighlight: { position: 'absolute', left: 6, right: 6, top: WHEEL_ITEM_HEIGHT, height: WHEEL_ITEM_HEIGHT, borderRadius: 10, backgroundColor: COLORS.greenSoft },
   wheelItem: { height: WHEEL_ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   wheelText: { color: '#9AA19C', fontSize: 14, fontWeight: '600' },
   wheelTextSelected: { color: COLORS.greenDark, fontSize: 16, fontWeight: '800' },
   semesterPreview: { marginTop: 10, textAlign: 'center', color: COLORS.greenDark, fontSize: 13, fontWeight: '800' },
-  saveButton: { marginTop: 12, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
+  saveButton: { marginTop: 16, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
   saveButtonDisabled: { opacity: 0.35 },
   saveButtonText: { color: COLORS.white, fontSize: 16, fontWeight: '800' },
-  findHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
+  secondaryButton: { marginTop: 14, height: 48, borderRadius: 14, borderWidth: 1, borderColor: COLORS.green, alignItems: 'center', justifyContent: 'center' },
+  secondaryButtonText: { color: COLORS.green, fontSize: 14, fontWeight: '800' },
   findContent: { paddingHorizontal: 20, paddingBottom: 40 },
   matchSummary: { backgroundColor: COLORS.greenSoft, borderRadius: 18, padding: 16, marginBottom: 14 },
   matchSummaryTitle: { color: COLORS.greenDark, fontSize: 16, fontWeight: '800' },
   matchSummaryMeta: { color: COLORS.subtext, fontSize: 12, marginTop: 6 },
-  expandNotice: { backgroundColor: '#EEF1E8', borderRadius: 16, padding: 14, marginBottom: 14 },
-  expandNoticeTitle: { color: COLORS.text, fontSize: 13, fontWeight: '800' },
-  expandNoticeBody: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 5 },
-  expandNoticeLink: { color: COLORS.green, fontSize: 12, fontWeight: '800', marginTop: 8 },
-  filterRow: { gap: 8, paddingBottom: 18 },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 18 },
   filterChip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.surface },
   filterChipActive: { backgroundColor: COLORS.green, borderColor: COLORS.green },
   filterChipText: { color: COLORS.text, fontSize: 12, fontWeight: '700' },
   filterChipTextActive: { color: COLORS.white },
+  noticeBox: { backgroundColor: '#F2EBDD', borderRadius: 15, padding: 13, marginBottom: 16 },
+  noticeTitle: { color: COLORS.warning, fontSize: 13, fontWeight: '800' },
+  noticeBody: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 4 },
   resultCount: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginBottom: 12 },
   studentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 18, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: COLORS.line },
   studentInfo: { flex: 1 },
-  studentTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  inlineRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   studentName: { color: COLORS.text, fontSize: 15, fontWeight: '800' },
-  reasonBadge: { color: COLORS.greenDark, backgroundColor: COLORS.greenSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '800' },
-  homeUniversity: { color: COLORS.green, fontSize: 11, fontWeight: '700', marginTop: 5 },
-  studentIntro: { color: COLORS.text, fontSize: 12, marginTop: 6, lineHeight: 18 },
+  reasonBadge: { backgroundColor: COLORS.greenSoft, color: COLORS.greenDark, fontSize: 10, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  homeUniversity: { color: COLORS.green, fontSize: 11, fontWeight: '700', marginTop: 6 },
+  studentIntro: { color: COLORS.text, fontSize: 12, marginTop: 7, lineHeight: 18 },
   miniInterestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 6 },
   miniInterest: { color: COLORS.green, fontSize: 11, fontWeight: '700' },
-  studentMeta: { color: COLORS.subtext, fontSize: 10, marginTop: 6 },
+  studentMeta: { color: COLORS.subtext, fontSize: 10, marginTop: 7 },
   studentArrow: { color: COLORS.subtext, fontSize: 24, marginLeft: 8 },
   emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  emptyCard: { padding: 20, borderRadius: 18, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
   emptyTitle: { color: COLORS.text, fontSize: 17, fontWeight: '800' },
   emptyBody: { color: COLORS.subtext, fontSize: 13, lineHeight: 20, marginTop: 8 },
   prototypeNote: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 10, textAlign: 'center' },
   profileContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  profileHero: { alignItems: 'center', paddingVertical: 18, marginBottom: 12 },
+  profileHero: { alignItems: 'center', paddingVertical: 14, marginBottom: 12 },
   profileName: { color: COLORS.text, fontSize: 27, fontWeight: '800' },
-  profileHomeUniversity: { marginTop: 5, color: COLORS.green, fontSize: 13, fontWeight: '700' },
-  profilePrivacy: { marginTop: 6, color: COLORS.subtext, fontSize: 12 },
-  profileIntro: { marginTop: 14, color: COLORS.text, fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  profilePrivacy: { marginTop: 5, color: COLORS.subtext, fontSize: 12 },
+  profileIntro: { marginTop: 12, color: COLORS.text, fontSize: 14, lineHeight: 21, textAlign: 'center' },
   profileSection: { backgroundColor: COLORS.surface, borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: COLORS.line },
   profileSectionTitle: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginBottom: 10 },
   profileRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: COLORS.line },
@@ -809,14 +612,73 @@ const styles = StyleSheet.create({
   interestChipText: { color: COLORS.greenDark, fontSize: 12, fontWeight: '700' },
   styleChip: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999 },
   styleChipText: { color: COLORS.text, fontSize: 12, fontWeight: '700' },
-  privacyNotice: { backgroundColor: COLORS.greenSoft, borderRadius: 16, padding: 14, marginBottom: 12 },
+  privacyNotice: { backgroundColor: COLORS.greenSoft, borderRadius: 16, padding: 14, marginTop: 14, marginBottom: 12 },
   privacyNoticeTitle: { color: COLORS.greenDark, fontSize: 13, fontWeight: '800' },
   privacyNoticeBody: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 6 },
   profileActionRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
   profileActionButton: { flex: 1, height: 52, borderRadius: 15, borderWidth: 1, borderColor: COLORS.green, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surface },
   profileActionButtonDone: { backgroundColor: COLORS.greenSoft },
   profileActionText: { color: COLORS.green, fontSize: 15, fontWeight: '800' },
-  profileActionTextDone: { color: COLORS.greenDark },
   profileMessageButton: { flex: 1, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
   profileMessageButtonText: { color: COLORS.white, fontSize: 15, fontWeight: '800' },
+  communityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12 },
+  pageTitle: { color: COLORS.text, fontSize: 25, fontWeight: '800' },
+  writeButton: { backgroundColor: COLORS.green, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12 },
+  writeButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+  communityContent: { paddingHorizontal: 20, paddingBottom: 110 },
+  anonymousBanner: { backgroundColor: COLORS.greenSoft, borderRadius: 18, padding: 15, marginBottom: 16 },
+  anonymousTitle: { color: COLORS.greenDark, fontSize: 14, fontWeight: '800' },
+  anonymousBody: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 5 },
+  communityPost: { backgroundColor: COLORS.surface, borderRadius: 17, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: COLORS.line },
+  postCategory: { color: COLORS.green, fontSize: 11, fontWeight: '800' },
+  postTime: { color: COLORS.subtext, fontSize: 10 },
+  postBody: { color: COLORS.subtext, fontSize: 12, lineHeight: 18, marginTop: 7 },
+  postDetailContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  postDetailTitle: { color: COLORS.text, fontSize: 23, fontWeight: '800', lineHeight: 31, marginTop: 8 },
+  postDetailMeta: { color: COLORS.subtext, fontSize: 11, marginTop: 8 },
+  postDetailBody: { color: COLORS.text, fontSize: 15, lineHeight: 24, marginTop: 24, marginBottom: 30 },
+  commentHeader: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginBottom: 10 },
+  commentCard: { backgroundColor: COLORS.surface, borderRadius: 14, padding: 13, marginBottom: 8, borderWidth: 1, borderColor: COLORS.line },
+  commentAuthor: { color: COLORS.green, fontSize: 11, fontWeight: '800', marginBottom: 5 },
+  commentText: { color: COLORS.text, fontSize: 13, lineHeight: 19 },
+  commentInputRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  commentInput: { flex: 1, height: 48, borderRadius: 14, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, paddingHorizontal: 13, color: COLORS.text },
+  commentSend: { width: 64, borderRadius: 14, backgroundColor: COLORS.green, alignItems: 'center', justifyContent: 'center' },
+  commentSendText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+  checkinContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  roomCard: { backgroundColor: COLORS.greenSoft, borderRadius: 18, padding: 16, marginBottom: 26 },
+  roomTitle: { color: COLORS.greenDark, fontSize: 18, fontWeight: '800', lineHeight: 25 },
+  roomMeta: { color: COLORS.subtext, fontSize: 11, marginTop: 6 },
+  checkinLabel: { color: COLORS.green, fontSize: 12, fontWeight: '800' },
+  checkinQuestion: { color: COLORS.text, fontSize: 24, fontWeight: '800', lineHeight: 33, marginTop: 8 },
+  checkinGuide: { color: COLORS.subtext, fontSize: 12, lineHeight: 18, marginTop: 8, marginBottom: 18 },
+  myAnswer: { backgroundColor: COLORS.surface, borderRadius: 15, padding: 14, borderWidth: 1, borderColor: COLORS.line, marginBottom: 22 },
+  myAnswerLabel: { color: COLORS.subtext, fontSize: 10, fontWeight: '700' },
+  myAnswerText: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginTop: 5 },
+  answerRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 13 },
+  answerLabel: { width: 78, color: COLORS.text, fontSize: 11, fontWeight: '700' },
+  answerBarTrack: { flex: 1, height: 9, backgroundColor: COLORS.line, borderRadius: 999, overflow: 'hidden' },
+  answerBarFill: { height: 9, backgroundColor: COLORS.green, borderRadius: 999 },
+  answerCount: { width: 30, textAlign: 'right', color: COLORS.subtext, fontSize: 10 },
+  roomMessage: { backgroundColor: COLORS.surface, borderRadius: 14, padding: 13, marginTop: 8, borderWidth: 1, borderColor: COLORS.line },
+  checklistContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  progressCard: { backgroundColor: COLORS.green, borderRadius: 19, padding: 18, marginBottom: 22 },
+  progressTitle: { color: COLORS.white, fontSize: 17, fontWeight: '800' },
+  progressTrack: { height: 9, backgroundColor: '#6E8977', borderRadius: 999, overflow: 'hidden', marginTop: 14 },
+  progressFill: { height: 9, backgroundColor: COLORS.white, borderRadius: 999 },
+  checkGroup: { color: COLORS.text, fontSize: 15, fontWeight: '800', marginTop: 16, marginBottom: 8 },
+  checkItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: COLORS.line },
+  checkBox: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  checkBoxDone: { backgroundColor: COLORS.green, borderColor: COLORS.green },
+  checkMark: { color: COLORS.white, fontWeight: '800' },
+  checkText: { color: COLORS.text, fontSize: 13, fontWeight: '600' },
+  checkTextDone: { color: COLORS.subtext, textDecorationLine: 'line-through' },
+  myContent: { paddingHorizontal: 20, paddingBottom: 115 },
+  mySection: { backgroundColor: COLORS.surface, borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: COLORS.line },
+  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
+  toggleLabel: { color: COLORS.text, fontSize: 13, fontWeight: '700', flex: 1, marginRight: 12 },
+  toggle: { width: 46, height: 27, borderRadius: 999, backgroundColor: '#D8DAD6', padding: 3 },
+  toggleOn: { backgroundColor: COLORS.green },
+  toggleDot: { width: 21, height: 21, borderRadius: 11, backgroundColor: COLORS.white },
+  toggleDotOn: { marginLeft: 19 },
 });
