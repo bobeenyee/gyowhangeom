@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -22,12 +22,9 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-const SEMESTER_OPTIONS = [
-  '2027년 1학기',
-  '2027년 2학기',
-  '2027년 여름계절학기',
-  '2027년 겨울계절학기',
-];
+const YEAR_OPTIONS = Array.from({ length: 25 }, (_, i) => `${2026 + i}년`);
+const TERM_OPTIONS = ['1학기', '2학기', '여름계절학기', '겨울계절학기'];
+const WHEEL_ITEM_HEIGHT = 44;
 
 export default function App() {
   const [started, setStarted] = useState(false);
@@ -63,23 +60,17 @@ export default function App() {
     );
   }
 
-  return (
-    <HomeScreen
-      exchangeInfo={exchangeInfo}
-      onRegister={() => setScreen('register')}
-    />
-  );
+  return <HomeScreen exchangeInfo={exchangeInfo} onRegister={() => setScreen('register')} />;
 }
 
 function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
   const [country, setCountry] = useState(initialValue?.country || '');
   const [city, setCity] = useState(initialValue?.city || '');
   const [university, setUniversity] = useState(initialValue?.university || '');
-  const [semester, setSemester] = useState(
-    SEMESTER_OPTIONS.includes(initialValue?.semester) ? initialValue.semester : ''
-  );
+  const [year, setYear] = useState(initialValue?.year || '2027년');
+  const [term, setTerm] = useState(initialValue?.term || '1학기');
 
-  const canSave = country.trim() && city.trim() && university.trim() && semester;
+  const canSave = country.trim() && city.trim() && university.trim();
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -99,39 +90,72 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
 
         <View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>파견 학기</Text>
-          <View style={styles.semesterGrid}>
-            {SEMESTER_OPTIONS.map((option) => {
-              const selected = semester === option;
-              return (
-                <TouchableOpacity
-                  key={option}
-                  activeOpacity={0.8}
-                  style={[styles.semesterOption, selected && styles.semesterOptionSelected]}
-                  onPress={() => setSemester(option)}
-                >
-                  <Text style={[styles.semesterOptionText, selected && styles.semesterOptionTextSelected]}>
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <Text style={styles.wheelHelp}>휠을 위아래로 돌려 선택하세요</Text>
+          <View style={styles.wheelRow}>
+            <WheelPicker options={YEAR_OPTIONS} value={year} onChange={setYear} />
+            <WheelPicker options={TERM_OPTIONS} value={term} onChange={setTerm} />
           </View>
+          <Text style={styles.selectedSemester}>선택: {year} {term}</Text>
         </View>
 
         <TouchableOpacity
           disabled={!canSave}
           style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
-          onPress={() => onSave({
-            country: country.trim(),
-            city: city.trim(),
-            university: university.trim(),
-            semester,
-          })}
+          onPress={() =>
+            onSave({
+              country: country.trim(),
+              city: city.trim(),
+              university: university.trim(),
+              year,
+              term,
+              semester: `${year} ${term}`,
+            })
+          }
         >
           <Text style={styles.saveButtonText}>저장하기</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function WheelPicker({ options, value, onChange }) {
+  const ref = useRef(null);
+  const selectedIndex = Math.max(0, options.indexOf(value));
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      ref.current?.scrollTo({ y: selectedIndex * WHEEL_ITEM_HEIGHT, animated: false });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const updateSelection = (offsetY) => {
+    const index = Math.max(0, Math.min(options.length - 1, Math.round(offsetY / WHEEL_ITEM_HEIGHT)));
+    onChange(options[index]);
+  };
+
+  return (
+    <View style={styles.wheelBox}>
+      <View pointerEvents="none" style={styles.wheelSelection} />
+      <ScrollView
+        ref={ref}
+        style={styles.wheel}
+        contentContainerStyle={styles.wheelContent}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={WHEEL_ITEM_HEIGHT}
+        decelerationRate="fast"
+        nestedScrollEnabled
+        onMomentumScrollEnd={(event) => updateSelection(event.nativeEvent.contentOffset.y)}
+        onScrollEndDrag={(event) => updateSelection(event.nativeEvent.contentOffset.y)}
+      >
+        {options.map((option) => (
+          <View key={option} style={styles.wheelItem}>
+            <Text style={[styles.wheelItemText, option === value && styles.wheelItemTextSelected]}>{option}</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -160,7 +184,9 @@ function HomeScreen({ exchangeInfo, onRegister }) {
             <Text style={styles.miniBrand}>교환점</Text>
             <Text style={styles.hello}>안녕하세요 👋</Text>
           </View>
-          <View style={styles.profileCircle}><Text style={styles.profileText}>B</Text></View>
+          <View style={styles.profileCircle}>
+            <Text style={styles.profileText}>B</Text>
+          </View>
         </View>
 
         <View style={styles.destinationCard}>
@@ -216,7 +242,9 @@ function HomeScreen({ exchangeInfo, onRegister }) {
 function QuickCard({ icon, title, subtitle }) {
   return (
     <TouchableOpacity activeOpacity={0.82} style={styles.quickCard}>
-      <View style={styles.quickIconWrap}><Text style={styles.quickIcon}>{icon}</Text></View>
+      <View style={styles.quickIconWrap}>
+        <Text style={styles.quickIcon}>{icon}</Text>
+      </View>
       <Text style={styles.quickTitle}>{title}</Text>
       <Text style={styles.quickSubtitle}>{subtitle}</Text>
     </TouchableOpacity>
@@ -278,11 +306,16 @@ const styles = StyleSheet.create({
   fieldWrap: { marginBottom: 18 },
   fieldLabel: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
   input: { height: 52, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, paddingHorizontal: 15, fontSize: 15, color: COLORS.text },
-  semesterGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  semesterOption: { width: '48.5%', minHeight: 50, marginBottom: 10, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, backgroundColor: COLORS.surface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  semesterOptionSelected: { backgroundColor: COLORS.green, borderColor: COLORS.green },
-  semesterOptionText: { color: COLORS.text, fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  semesterOptionTextSelected: { color: COLORS.white },
+  wheelHelp: { color: COLORS.subtext, fontSize: 12, marginBottom: 10 },
+  wheelRow: { flexDirection: 'row', gap: 10 },
+  wheelBox: { flex: 1, height: 132, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, backgroundColor: COLORS.surface, overflow: 'hidden' },
+  wheel: { flex: 1 },
+  wheelContent: { paddingVertical: WHEEL_ITEM_HEIGHT },
+  wheelSelection: { position: 'absolute', top: WHEEL_ITEM_HEIGHT, left: 8, right: 8, height: WHEEL_ITEM_HEIGHT, borderRadius: 10, backgroundColor: COLORS.greenSoft, zIndex: 0 },
+  wheelItem: { height: WHEEL_ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  wheelItemText: { color: '#A2A8A3', fontSize: 15, fontWeight: '600' },
+  wheelItemTextSelected: { color: COLORS.greenDark, fontSize: 16, fontWeight: '800' },
+  selectedSemester: { marginTop: 10, color: COLORS.greenDark, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   saveButton: { marginTop: 12, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
   saveButtonDisabled: { opacity: 0.35 },
   saveButtonText: { color: COLORS.white, fontSize: 16, fontWeight: '800' },
