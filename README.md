@@ -13,20 +13,20 @@
 - 답변한 사람만 확인할 수 있는 체크인 집계 (실제 DB 응답)
 - 친구추가·개인 메시지는 아직 서버 미연결, UI로만 준비됨. **성공했다고 표시하지 않음**
 
-**중요:** Supabase 환경변수가 없으면 실제 회원 서비스가 아니라 명시적인 미리보기 모드만 제공됩니다.
+**중요:** 이제 서울 Supabase 프로젝트의 공개용 키가 기본 설정으로 연결되어 있으며, 환경변수가 없더라도 실제 회원가입 화면을 열 수 있습니다.
 미리보기의 사용자·게시글·체크인 통계는 가상의 샘플이며 앱을 재시작하면 상태가 사라질 수 있습니다.
 
 ## 실제 회원/DB 기능 연결 절차
 
-1. https://supabase.com/dashboard 에서 프로젝트 생성
-2. SQL Editor에서 [supabase/schema.sql](supabase/schema.sql) 파일 **전체**를 실행
-3. Supabase 프로젝트의 Connect 또는 API 설정에서 **Project URL** 과 **Publishable key** 확인
-4. 루트에 .env 파일 만들고 [.env.example](.env.example) 참고하여 값 입력 (예시가 아닌 실제 값)
+1. **완료:** Supabase 서울 프로젝트 `교환점` 생성 (Project Ref: `dtrkktdxalajyncanzlc`)
+2. **완료:** [supabase/schema.sql](supabase/schema.sql)을 프로젝트 DB에 적용
+3. **완료:** 앱에 Project URL 및 publishable client key 연결 (관리자 비밀키 아님)
+4. **선택:** 환경을 바꾸고 싶을 때만 프로젝트 루트 `.env`로 URL과 키를 덮어쓰기
 
    EXPO_PUBLIC_SUPABASE_URL=https://PROJECT_REF.supabase.co
    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_XXXXXXXX
 
-5. 프로젝트 루트에서 터미널 실행:
+5. GitHub Desktop에서 Pull 한 후 프로젝트 루트 터미널 실행:
 
    npm.cmd install
    npx.cmd expo start --clear --tunnel
@@ -90,3 +90,12 @@ Expo Go QR 접속에 서로 다른 와이파이를 쓰면 --tunnel 사용.
 3. 상대 사용자 인증 기반의 친구 요청/채팅
 4. 서버측 위치 검색 확장과 게시판 지역별 분리
 5. 앱·보안 자동 테스트 및 배포 설정
+
+## 최초 연결 검증 메모 (2026-11-04)
+
+- Supabase 프로젝트: 서울 `ap-northeast-2`, 정상 운영 상태
+- 최초 DB 마이그레이션 적용 성공
+- 공용 테이블 6개에 RLS 활성화·RLS 정책 14개
+- private 작성자 테이블 2개는 일반 로그인 사용자/비로그인 사용자에게 SCHEMA USAGE 및 SELECT 권한이 없는 것을 쿼리로 확인함
+- **남은 보안 경고:** private 작성자 테이블에 RLS 미적용. 운영 공개 전 사용자의 승인 후 방어층 강화 필요
+- 실제 두 계정 회원가입/교차 테스트는 아직 미완료
