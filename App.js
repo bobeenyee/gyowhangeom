@@ -22,6 +22,13 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
+const SEMESTER_OPTIONS = [
+  '2027년 1학기',
+  '2027년 2학기',
+  '2027년 여름계절학기',
+  '2027년 겨울계절학기',
+];
+
 export default function App() {
   const [started, setStarted] = useState(false);
   const [screen, setScreen] = useState('home');
@@ -68,9 +75,11 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
   const [country, setCountry] = useState(initialValue?.country || '');
   const [city, setCity] = useState(initialValue?.city || '');
   const [university, setUniversity] = useState(initialValue?.university || '');
-  const [semester, setSemester] = useState(initialValue?.semester || '');
+  const [semester, setSemester] = useState(
+    SEMESTER_OPTIONS.includes(initialValue?.semester) ? initialValue.semester : ''
+  );
 
-  const canSave = country.trim() && city.trim() && university.trim() && semester.trim();
+  const canSave = country.trim() && city.trim() && university.trim() && semester;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -87,7 +96,27 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
         <Field label="국가" value={country} onChangeText={setCountry} placeholder="예: 덴마크" />
         <Field label="도시" value={city} onChangeText={setCity} placeholder="예: 코펜하겐" />
         <Field label="파견 대학" value={university} onChangeText={setUniversity} placeholder="예: University of Copenhagen" />
-        <Field label="파견 학기" value={semester} onChangeText={setSemester} placeholder="예: 2027 봄학기" />
+
+        <View style={styles.fieldWrap}>
+          <Text style={styles.fieldLabel}>파견 학기</Text>
+          <View style={styles.semesterGrid}>
+            {SEMESTER_OPTIONS.map((option) => {
+              const selected = semester === option;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  activeOpacity={0.8}
+                  style={[styles.semesterOption, selected && styles.semesterOptionSelected]}
+                  onPress={() => setSemester(option)}
+                >
+                  <Text style={[styles.semesterOptionText, selected && styles.semesterOptionTextSelected]}>
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
 
         <TouchableOpacity
           disabled={!canSave}
@@ -96,7 +125,7 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
             country: country.trim(),
             city: city.trim(),
             university: university.trim(),
-            semester: semester.trim(),
+            semester,
           })}
         >
           <Text style={styles.saveButtonText}>저장하기</Text>
@@ -170,7 +199,7 @@ function HomeScreen({ exchangeInfo, onRegister }) {
         <View style={styles.postCard}>
           <Text style={styles.postBadge}>여행메이트</Text>
           <Text style={styles.postTitle}>코펜하겐에서 같이 여행 갈 사람?</Text>
-          <Text style={styles.postMeta}>덴마크 · 2027 봄학기 · 방금</Text>
+          <Text style={styles.postMeta}>덴마크 · 2027년 1학기 · 방금</Text>
         </View>
       </ScrollView>
 
@@ -249,6 +278,11 @@ const styles = StyleSheet.create({
   fieldWrap: { marginBottom: 18 },
   fieldLabel: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
   input: { height: 52, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, paddingHorizontal: 15, fontSize: 15, color: COLORS.text },
+  semesterGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  semesterOption: { width: '48.5%', minHeight: 50, marginBottom: 10, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, backgroundColor: COLORS.surface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  semesterOptionSelected: { backgroundColor: COLORS.green, borderColor: COLORS.green },
+  semesterOptionText: { color: COLORS.text, fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  semesterOptionTextSelected: { color: COLORS.white },
   saveButton: { marginTop: 12, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.green },
   saveButtonDisabled: { opacity: 0.35 },
   saveButtonText: { color: COLORS.white, fontSize: 16, fontWeight: '800' },
