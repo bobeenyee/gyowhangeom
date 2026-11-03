@@ -87,6 +87,11 @@ create table if not exists public.checkin_answers (
 create index if not exists checkin_room_idx on public.checkin_answers(room_key,question_key);
 
 -- Public schema에서는 꼭 필요한 권한만 부여합니다.
+-- 비공개 작성자 연결 테이블: 소유자인 postgres가 보안 함수로만 접근.
+-- anon/authenticated 정책을 만들지 않으며, 스키마 및 테이블 직접 접근 권한도 없음.
+alter table private.post_authors enable row level security;
+alter table private.comment_authors enable row level security;
+
 alter table public.people_profiles enable row level security;
 alter table public.exchange_assignments enable row level security;
 alter table public.posts enable row level security;
