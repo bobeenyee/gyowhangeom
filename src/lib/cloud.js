@@ -27,6 +27,7 @@ export function friendlyError(error) {
   if (/Failed to fetch|Network request failed/i.test(message)) return '서버에 연결하지 못했어요. 인터넷을 확인해 주세요.';
   if (/Invalid login credentials/i.test(message)) return '이메일 또는 비밀번호가 올바르지 않아요.';
   if (/Email not confirmed/i.test(message)) return '가입 확인 메일을 먼저 확인해 주세요.';
+  if (/Email address not authorized|email_address_not_authorized/i.test(message)) return 'Supabase 기본 이메일 서버는 해당 프로젝트 팀원에게만 메일을 보낼 수 있어요. 팀 초대 또는 SMTP 설정이 필요합니다.';
   if (/relation .* does not exist|Could not find the table|Could not find the function/i.test(message)) {
     return '데이터베이스 설정이 아직 완료되지 않았어요. README의 SQL 설치 단계를 확인해 주세요.';
   }
