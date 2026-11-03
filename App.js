@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -10,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { AuthScreen, SetupScreen } from './src/components/AuthScreen';
+import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
 
 const COLORS = {
   background: '#F7F5EE',
@@ -32,6 +35,7 @@ const SAMPLE_USERS = [
   {
     id: 'u1', nickname: '민지', universityId: 'https://ror.org/035b05819', universityName: 'University of Copenhagen',
     city: 'Copenhagen', country: 'Denmark', semester: '2027년 1학기', homeUniversity: '연세대학교', showHomeUniversity: false,
+    discoverable: true,
     intro: '여행이랑 카페 좋아해요! 주말에 같이 돌아다닐 친구를 찾고 있어요.',
     interests: ['여행', '카페', '사진'], style: ['계획형', '주말여행 자주', '천천히 구경'], distanceKm: 0,
   },
@@ -112,15 +116,22 @@ const CHECKIN_MESSAGES = [
 
 export default function App() {
   const [started, setStarted] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(!isCloudConfigured);
+  const [cloudLoading, setCloudLoading] = useState(isCloudConfigured);
+  const [people, setPeople] = useState([]);
+  const [checkinSummary, setCheckinSummary] = useState([]);
+  const [cloudNotice, setCloudNotice] = useState('');
   const [screen, setScreen] = useState('home');
   const [exchangeInfo, setExchangeInfo] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [posts, setPosts] = useState(INITIAL_POSTS);
+  const [posts, setPosts] = useState(isCloudConfigured ? [] : INITIAL_POSTS);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
   const [checkinAnswer, setCheckinAnswer] = useState('');
   const [profile, setProfile] = useState({
-    nickname: '보빈',
+    nickname: isCloudConfigured ? '교환학생' : '보빈',
     homeUniversity: '국민대학교',
     showHomeUniversity: false,
     intro: '여행, 카페, 맛집 좋아해요. 같이 돌아다닐 친구를 찾고 있어요.',
@@ -128,7 +139,139 @@ export default function App() {
     style: ['계획형', '주말여행 자주'],
   });
 
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) setCloudNotice(friendlyError(error));
+      setSession(data?.session || null);
+      setAuthReady(true);
+    }).catch((e) => {
+      if (active) { setCloudNotice(friendlyError(e)); setAuthReady(true); }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (active) { setSession(nextSession); setAuthReady(true); }
+    });
+    return () => { active = false; subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id) return;
+    let active = true;
+    setCloudLoading(true);
+    Promise.all([loadAccount(session.user.id), loadPosts()]).then(([account, remotePosts]) => {
+      if (!active) return;
+      setProfile(account.profile || {
+        nickname: '교환학생', homeUniversity: '', showHomeUniversity: false,
+        discoverable: true, intro: '', interests: [], style: [],
+      });
+      setExchangeInfo(account.exchangeInfo);
+      setChecklist(INITIAL_CHECKLIST.map((item) => ({ ...item, done: Boolean(account.checks[item.id]) })));
+      setPosts(remotePosts);
+      setCloudNotice('');
+    }).catch((e) => {
+      if (active) setCloudNotice(friendlyError(e));
+    }).finally(() => { if (active) setCloudLoading(false); });
+    return () => { active = false; };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id || !exchangeInfo) { setPeople([]); return; }
+    let active = true;
+    loadPeople(exchangeInfo).then((users) => { if (active) setPeople(users); })
+      .catch((e) => { if (active) setCloudNotice(friendlyError(e)); });
+    return () => { active = false; };
+  }, [session?.user?.id, exchangeInfo?.universityId, exchangeInfo?.semester, exchangeInfo?.countryCode]);
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id || !exchangeInfo) {
+      if (supabase) { setCheckinAnswer(''); setCheckinSummary([]); }
+      return;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const answer = await loadCheckin(exchangeInfo, session.user.id);
+        const summary = answer ? await getCheckinSummary(exchangeInfo) : [];
+        if (active) { setCheckinAnswer(answer); setCheckinSummary(summary); }
+      } catch (e) { if (active) setCloudNotice(friendlyError(e)); }
+    })();
+    return () => { active = false; };
+  }, [session?.user?.id, exchangeInfo?.universityId, exchangeInfo?.semester, exchangeInfo?.city]);
+
   const goHome = () => setScreen('home');
+
+  async function submitExchange(info) {
+    if (supabase) {
+      try { await cloudSaveExchange(session.user.id, info); }
+      catch (e) { Alert.alert('저장 실패', friendlyError(e)); return; }
+    }
+    setExchangeInfo(info);
+    goHome();
+  }
+
+  async function submitProfile(info) {
+    if (supabase) {
+      try { await cloudSaveProfile(session.user.id, info); }
+      catch (e) { Alert.alert('저장 실패', friendlyError(e)); return; }
+    }
+    setProfile(info);
+    Alert.alert('저장 완료', '프로필이 저장됐어요.');
+  }
+
+  async function submitPost(post) {
+    if (supabase) {
+      try {
+        await createPost(post, exchangeInfo);
+        setPosts(await loadPosts());
+      } catch (e) { Alert.alert('글 작성 실패', friendlyError(e)); return; }
+    } else {
+      setPosts((prev) => [{ ...post, id: 'preview' + Date.now(), likes: 0, comments: [], time: '방금' }, ...prev]);
+    }
+    setScreen('community');
+  }
+
+  async function submitComment(text) {
+    if (supabase) {
+      try { await createComment(selectedPostId, text); setPosts(await loadPosts()); }
+      catch (e) { Alert.alert('댓글 작성 실패', friendlyError(e)); throw e; }
+    } else {
+      setPosts((prev) => prev.map((item) =>
+        item.id === selectedPostId ? { ...item, comments: [...item.comments, text] } : item));
+    }
+  }
+
+  async function submitCheckin(text) {
+    if (supabase) {
+      try {
+        await saveCheckin(exchangeInfo, session.user.id, text);
+        setCheckinSummary(await getCheckinSummary(exchangeInfo));
+      } catch (e) { Alert.alert('체크인 저장 실패', friendlyError(e)); return false; }
+    }
+    setCheckinAnswer(text);
+    return true;
+  }
+
+  async function toggleCheck(id) {
+    const item = checklist.find((i) => i.id === id);
+    if (!item) return;
+    const next = !item.done;
+    if (supabase) {
+      try { await saveCheck(session.user.id, id, next); }
+      catch (e) { Alert.alert('저장 실패', friendlyError(e)); return; }
+    }
+    setChecklist((prev) => prev.map((i) => i.id === id ? { ...i, done: next } : i));
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) Alert.alert('로그아웃 실패', friendlyError(error));
+    else { setPosts([]); setPeople([]); setExchangeInfo(null); setScreen('home'); }
+  }
+
 
   if (!started) {
     return (
@@ -146,11 +289,24 @@ export default function App() {
     );
   }
 
+
+  if (!isCloudConfigured && !previewMode) return <SetupScreen onPreview={() => setPreviewMode(true)} />;
+  if (isCloudConfigured && !authReady) {
+    return <Screen><View style={styles.emptyState}><ActivityIndicator color={COLORS.green} /><Text style={styles.emptyBody}>로그인 상태를 확인하는 중...</Text></View></Screen>;
+  }
+  if (isCloudConfigured && !session) return <AuthScreen />;
+  if (isCloudConfigured && cloudLoading) {
+    return <Screen><View style={styles.emptyState}><ActivityIndicator color={COLORS.green} /><Text style={styles.emptyBody}>내 교환 정보를 불러오는 중...</Text></View></Screen>;
+  }
+  if (isCloudConfigured && cloudNotice) {
+    return <Screen><View style={styles.emptyState}><Text style={styles.emptyTitle}>서버 설정을 확인해 주세요</Text><Text style={styles.emptyBody}>{cloudNotice}</Text><PrimaryButton label="다시 불러오기" onPress={() => { setCloudNotice(''); supabase.auth.refreshSession(); }} /></View></Screen>;
+  }
+
   if (screen === 'register') {
-    return <ExchangeRegistrationScreen initialValue={exchangeInfo} onCancel={goHome} onSave={(info) => { setExchangeInfo(info); goHome(); }} />;
+    return <ExchangeRegistrationScreen initialValue={exchangeInfo} onCancel={goHome} onSave={submitExchange} />;
   }
   if (screen === 'find') {
-    return <FindStudentsScreen exchangeInfo={exchangeInfo} onBack={goHome} onRegister={() => setScreen('register')} onOpenProfile={(user) => { setSelectedUser(user); setScreen('profile'); }} />;
+    return <FindStudentsScreen exchangeInfo={exchangeInfo} onBack={goHome} onRegister={() => setScreen('register')} users={isCloudConfigured ? people : SAMPLE_USERS} preview={!isCloudConfigured} onOpenProfile={(user) => { setSelectedUser(user); setScreen('profile'); }} />;
   }
   if (screen === 'profile' && selectedUser) {
     return <StudentProfileScreen user={selectedUser} onBack={() => setScreen('find')} />;
@@ -159,20 +315,20 @@ export default function App() {
     return <CommunityScreen posts={posts} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => { setSelectedPostId(id); setScreen('postDetail'); }} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
   }
   if (screen === 'writePost') {
-    return <WritePostScreen onCancel={() => setScreen('community')} onSubmit={(post) => { setPosts((prev) => [{ ...post, id: `p${Date.now()}`, likes: 0, comments: [], time: '방금' }, ...prev]); setScreen('community'); }} />;
+    return <WritePostScreen onCancel={() => setScreen('community')} onSubmit={submitPost} />;
   }
   if (screen === 'postDetail') {
     const post = posts.find((item) => item.id === selectedPostId);
-    return <PostDetailScreen post={post} onBack={() => setScreen('community')} onAddComment={(text) => setPosts((prev) => prev.map((item) => item.id === selectedPostId ? { ...item, comments: [...item.comments, text] } : item))} />;
+    return <PostDetailScreen post={post} onBack={() => setScreen('community')} onAddComment={submitComment} />;
   }
   if (screen === 'checkin') {
-    return <CheckInScreen exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={setCheckinAnswer} onBack={goHome} />;
+    return <CheckInScreen exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={submitCheckin} responses={isCloudConfigured ? checkinSummary : CHECKIN_RESPONSES} preview={!isCloudConfigured} onBack={goHome} />;
   }
   if (screen === 'checklist') {
-    return <ChecklistScreen items={checklist} onBack={goHome} onToggle={(id) => setChecklist((prev) => prev.map((item) => item.id === id ? { ...item, done: !item.done } : item))} />;
+    return <ChecklistScreen items={checklist} onBack={goHome} onToggle={toggleCheck} />;
   }
   if (screen === 'my') {
-    return <MyScreen profile={profile} exchangeInfo={exchangeInfo} onSave={setProfile} onBack={goHome} onEditExchange={() => setScreen('register')} onFind={() => setScreen('find')} onCommunity={() => setScreen('community')} />;
+    return <MyScreen profile={profile} exchangeInfo={exchangeInfo} onSave={submitProfile} onSignOut={isCloudConfigured ? signOut : null} onBack={goHome} onEditExchange={() => setScreen('register')} onFind={() => setScreen('find')} onCommunity={() => setScreen('community')} />;
   }
 
   return (
@@ -185,6 +341,8 @@ export default function App() {
       onCheckin={() => setScreen('checkin')}
       onChecklist={() => setScreen('checklist')}
       onMy={() => setScreen('my')}
+      posts={posts}
+      preview={!isCloudConfigured}
     />
   );
 }
