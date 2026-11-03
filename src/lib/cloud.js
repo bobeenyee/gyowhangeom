@@ -2,8 +2,10 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
-const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+// Supabase publishable keys are public client identifiers, NOT secrets.
+// Secret / service_role keys must never appear here.
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || 'https://dtrkktdxalajyncanzlc.supabase.co';
+const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() || 'sb_publishable_ze6DaMfp1x_bUVEyeuAO0Q_I1jeZuwM';
 
 export const isCloudConfigured = Boolean(url && key && /^https:\/\//.test(url));
 export const supabase = isCloudConfigured
