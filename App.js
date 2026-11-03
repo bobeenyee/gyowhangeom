@@ -26,6 +26,7 @@ const COLORS = {
 const YEARS = Array.from({ length: 25 }, (_, index) => 2026 + index);
 const TERMS = ['1학기', '2학기', '여름계절학기', '겨울계절학기'];
 const WHEEL_ITEM_HEIGHT = 44;
+const NEARBY_KM = 30;
 
 const SAMPLE_USERS = [
   {
@@ -36,6 +37,8 @@ const SAMPLE_USERS = [
     city: 'Copenhagen',
     country: 'Denmark',
     semester: '2027년 1학기',
+    latitude: 55.68,
+    longitude: 12.57,
     homeUniversity: '연세대학교',
     showHomeUniversity: false,
     intro: '여행이랑 카페 좋아해요! 주말에 같이 돌아다닐 친구를 찾고 있어요.',
@@ -50,39 +53,77 @@ const SAMPLE_USERS = [
     city: 'Copenhagen',
     country: 'Denmark',
     semester: '2027년 1학기',
+    latitude: 55.68,
+    longitude: 12.57,
     homeUniversity: '고려대학교',
-    showHomeUniversity: false,
+    showHomeUniversity: true,
     intro: '코펜하겐 같이 돌아다닐 친구 구해요. 맛집이랑 산책 좋아해요.',
     interests: ['맛집', '산책', '여행메이트'],
     style: ['즉흥형', '카페 좋아함', '사진 많이 찍음'],
   },
   {
     id: 'u3',
-    nickname: '지우',
-    universityId: 'https://ror.org/035b05819',
-    universityName: 'University of Copenhagen',
-    city: 'Copenhagen',
-    country: 'Denmark',
-    semester: '2027년 2학기',
-    homeUniversity: '성균관대학교',
-    showHomeUniversity: false,
-    intro: '맛집 탐방 좋아합니다.',
-    interests: ['맛집', '요리', '전시'],
-    style: ['계획형', '조용한 여행'],
-  },
-  {
-    id: 'u4',
     nickname: '현우',
     universityId: 'https://ror.org/05f0yaq80',
     universityName: 'Copenhagen Business School',
     city: 'Frederiksberg',
     country: 'Denmark',
     semester: '2027년 1학기',
+    latitude: 55.68,
+    longitude: 12.53,
     homeUniversity: '한양대학교',
     showHomeUniversity: false,
-    intro: '축구랑 여행 좋아해요.',
+    intro: '축구랑 여행 좋아해요. 주말에 근교 여행 같이 가요.',
     interests: ['축구', '여행', '러닝'],
     style: ['활동적', '주말여행 자주'],
+  },
+  {
+    id: 'u4',
+    nickname: '하린',
+    universityId: 'sample-itu',
+    universityName: 'IT University of Copenhagen',
+    city: 'Copenhagen',
+    country: 'Denmark',
+    semester: '2027년 1학기',
+    latitude: 55.66,
+    longitude: 12.59,
+    homeUniversity: '국민대학교',
+    showHomeUniversity: true,
+    intro: '전시랑 맛집 다니는 거 좋아해요. 평일 저녁에도 자주 나가요.',
+    interests: ['전시', '맛집', '카페'],
+    style: ['즉흥형', '도시여행', '평일 약속 가능'],
+  },
+  {
+    id: 'u5',
+    nickname: '도윤',
+    universityId: 'sample-dtu',
+    universityName: 'Technical University of Denmark',
+    city: 'Kongens Lyngby',
+    country: 'Denmark',
+    semester: '2027년 1학기',
+    latitude: 55.79,
+    longitude: 12.52,
+    homeUniversity: '부산대학교',
+    showHomeUniversity: false,
+    intro: '자전거 타고 근교 돌아다니는 걸 좋아해요.',
+    interests: ['자전거', '여행', '자연'],
+    style: ['활동적', '아침형', '근교여행'],
+  },
+  {
+    id: 'u6',
+    nickname: '수아',
+    universityId: 'sample-aarhus',
+    universityName: 'Aarhus University',
+    city: 'Aarhus',
+    country: 'Denmark',
+    semester: '2027년 1학기',
+    latitude: 56.17,
+    longitude: 10.20,
+    homeUniversity: '이화여자대학교',
+    showHomeUniversity: false,
+    intro: '덴마크 안에서 도시 여행 같이 할 친구 찾아요.',
+    interests: ['여행', '사진', '베이커리'],
+    style: ['계획형', '도시여행'],
   },
 ];
 
@@ -161,6 +202,8 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
           country: initialValue.country,
           countryCode: initialValue.countryCode,
           city: initialValue.city,
+          latitude: initialValue.latitude,
+          longitude: initialValue.longitude,
         }
       : null
   );
@@ -283,6 +326,8 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
             country: selectedUniversity.country,
             countryCode: selectedUniversity.countryCode,
             city: selectedUniversity.city,
+            latitude: selectedUniversity.latitude,
+            longitude: selectedUniversity.longitude,
             semester,
           })}
         >
@@ -334,7 +379,7 @@ function WheelPicker({ items, value, onChange, formatItem }) {
 }
 
 function FindStudentsScreen({ exchangeInfo, onBack, onRegister, onOpenProfile }) {
-  const [filter, setFilter] = useState('same');
+  const [filter, setFilter] = useState('school');
 
   if (!exchangeInfo) {
     return (
@@ -347,16 +392,37 @@ function FindStudentsScreen({ exchangeInfo, onBack, onRegister, onOpenProfile })
         </View>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>먼저 파견 정보를 등록해 주세요</Text>
-          <Text style={styles.emptyBody}>같은 대학과 학기의 교환학생을 찾으려면 내 파견 정보가 필요해요.</Text>
+          <Text style={styles.emptyBody}>같은 대학과 주변 교환학생을 찾으려면 내 파견 정보가 필요해요.</Text>
           <TouchableOpacity style={styles.saveButton} onPress={onRegister}><Text style={styles.saveButtonText}>파견 정보 등록하기</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  const sameSchool = SAMPLE_USERS.filter((user) => user.universityId === exchangeInfo.universityId && user.semester === exchangeInfo.semester);
-  const sameCity = SAMPLE_USERS.filter((user) => user.city === exchangeInfo.city && user.semester === exchangeInfo.semester);
-  const users = filter === 'same' ? sameSchool : sameCity;
+  const sameSemester = SAMPLE_USERS.filter((user) => user.semester === exchangeInfo.semester);
+  const sameSchool = sameSemester.filter((user) => user.universityId === exchangeInfo.universityId);
+  const sameCity = sameSemester.filter((user) => user.city === exchangeInfo.city);
+  const sameCountry = sameSemester.filter((user) => user.country === exchangeInfo.country);
+  const nearby = sameSemester.filter((user) => {
+    if (!Number.isFinite(exchangeInfo.latitude) || !Number.isFinite(exchangeInfo.longitude)) return user.city === exchangeInfo.city;
+    if (!Number.isFinite(user.latitude) || !Number.isFinite(user.longitude)) return false;
+    return distanceKm(exchangeInfo.latitude, exchangeInfo.longitude, user.latitude, user.longitude) <= NEARBY_KM;
+  });
+
+  const groups = {
+    school: sameSchool,
+    city: sameCity,
+    nearby,
+    country: sameCountry,
+  };
+  const users = groups[filter] || [];
+
+  const filterLabels = [
+    ['school', `같은 대학 ${sameSchool.length}`],
+    ['city', `같은 도시 ${sameCity.length}`],
+    ['nearby', `내 주변 ${nearby.length}`],
+    ['country', `같은 국가 ${sameCountry.length}`],
+  ];
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -371,33 +437,76 @@ function FindStudentsScreen({ exchangeInfo, onBack, onRegister, onOpenProfile })
           <Text style={styles.matchSummaryTitle}>{exchangeInfo.universityName}</Text>
           <Text style={styles.matchSummaryMeta}>{exchangeInfo.city} · {exchangeInfo.semester}</Text>
         </View>
-        <View style={styles.filterRow}>
-          <TouchableOpacity style={[styles.filterChip, filter === 'same' && styles.filterChipActive]} onPress={() => setFilter('same')}>
-            <Text style={[styles.filterChipText, filter === 'same' && styles.filterChipTextActive]}>같은 대학 · 학기</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.filterChip, filter === 'city' && styles.filterChipActive]} onPress={() => setFilter('city')}>
-            <Text style={[styles.filterChipText, filter === 'city' && styles.filterChipTextActive]}>같은 도시 · 학기</Text>
-          </TouchableOpacity>
-        </View>
+
+        {sameSchool.length <= 1 && nearby.length > sameSchool.length && (
+          <View style={styles.expandNotice}>
+            <Text style={styles.expandNoticeTitle}>같은 학교 사람이 아직 적어요</Text>
+            <Text style={styles.expandNoticeBody}>그래서 {NEARBY_KM}km 안의 주변 대학 교환학생 {nearby.length}명도 함께 찾을 수 있게 열어뒀어요.</Text>
+            <TouchableOpacity onPress={() => setFilter('nearby')}>
+              <Text style={styles.expandNoticeLink}>주변 사람 보기 →</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {filterLabels.map(([key, label]) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.filterChip, filter === key && styles.filterChipActive]}
+              onPress={() => setFilter(key)}
+            >
+              <Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         <Text style={styles.resultCount}>{users.length}명 찾았어요</Text>
-        {users.map((user) => <StudentCard key={user.id} user={user} onPress={() => onOpenProfile(user)} />)}
-        <Text style={styles.prototypeNote}>사람찾기에서는 공개하기로 선택한 정보만 보여줘요. 커뮤니티 활동과는 분리할 예정이에요.</Text>
+        {users.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>아직 이 범위에는 사람이 없어요</Text>
+            <Text style={styles.emptyBody}>위 필터에서 범위를 조금 넓혀보세요.</Text>
+          </View>
+        ) : (
+          users.map((user) => (
+            <StudentCard
+              key={user.id}
+              user={user}
+              exchangeInfo={exchangeInfo}
+              onPress={() => onOpenProfile(user)}
+            />
+          ))
+        )}
+        <Text style={styles.prototypeNote}>사람찾기 정보만 서로 보여주고, 커뮤니티 활동은 이 프로필과 연결하지 않는 구조로 갈 거예요.</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function StudentCard({ user, onPress }) {
+function StudentCard({ user, exchangeInfo, onPress }) {
+  const distance = Number.isFinite(exchangeInfo?.latitude) && Number.isFinite(exchangeInfo?.longitude)
+    ? Math.round(distanceKm(exchangeInfo.latitude, exchangeInfo.longitude, user.latitude, user.longitude))
+    : null;
+  const matchReason = user.universityId === exchangeInfo.universityId
+    ? '같은 대학'
+    : user.city === exchangeInfo.city
+      ? '같은 도시'
+      : distance !== null && distance <= NEARBY_KM
+        ? `약 ${distance}km`
+        : '같은 국가';
+
   return (
     <TouchableOpacity activeOpacity={0.8} style={styles.studentCard} onPress={onPress}>
-      <View style={styles.studentAvatar}><Text style={styles.studentAvatarText}>{user.nickname.slice(0, 1)}</Text></View>
       <View style={styles.studentInfo}>
-        <Text style={styles.studentName}>{user.nickname}</Text>
+        <View style={styles.studentTopRow}>
+          <Text style={styles.studentName}>{user.nickname}</Text>
+          <Text style={styles.reasonBadge}>{matchReason}</Text>
+        </View>
+        {user.showHomeUniversity && <Text style={styles.homeUniversity}>한국 대학 · {user.homeUniversity}</Text>}
         <Text style={styles.studentIntro}>{user.intro}</Text>
         <View style={styles.miniInterestWrap}>
           {user.interests.slice(0, 3).map((item) => <Text key={item} style={styles.miniInterest}>#{item}</Text>)}
         </View>
-        <Text style={styles.studentMeta}>{user.universityName} · {user.semester}</Text>
+        <Text style={styles.studentMeta}>{user.universityName} · {user.city} · {user.semester}</Text>
       </View>
       <Text style={styles.studentArrow}>›</Text>
     </TouchableOpacity>
@@ -418,9 +527,9 @@ function StudentProfileScreen({ user, onBack }) {
       </View>
       <ScrollView contentContainerStyle={styles.profileContent} showsVerticalScrollIndicator={false}>
         <View style={styles.profileHero}>
-          <View style={styles.profileAvatarLarge}><Text style={styles.profileAvatarLargeText}>{user.nickname.slice(0, 1)}</Text></View>
           <Text style={styles.profileName}>{user.nickname}</Text>
-          <Text style={styles.profilePrivacy}>닉네임으로 활동 중 · 소속 대학 비공개</Text>
+          {user.showHomeUniversity && <Text style={styles.profileHomeUniversity}>{user.homeUniversity}</Text>}
+          <Text style={styles.profilePrivacy}>사람찾기에서만 공개되는 프로필</Text>
           <Text style={styles.profileIntro}>{user.intro}</Text>
         </View>
 
@@ -451,8 +560,8 @@ function StudentProfileScreen({ user, onBack }) {
         </View>
 
         <View style={styles.privacyNotice}>
-          <Text style={styles.privacyNoticeTitle}>🔒 공개 정보는 사용자가 직접 선택해요</Text>
-          <Text style={styles.privacyNoticeBody}>본명, 한국 소속 대학, SNS 같은 정보는 기본 비공개로 두고 원하는 경우에만 공개하도록 만들 예정이에요.</Text>
+          <Text style={styles.privacyNoticeTitle}>익명 커뮤니티와는 완전히 분리돼요</Text>
+          <Text style={styles.privacyNoticeBody}>이 프로필은 사람찾기에서만 사용하고, 커뮤니티 글·댓글·체크인 활동에서는 사용자 프로필을 노출하지 않는 구조로 만들어요.</Text>
         </View>
 
         <View style={styles.profileActionRow}>
@@ -487,7 +596,6 @@ function HomeScreen({ exchangeInfo, onRegister, onFind }) {
             <Text style={styles.miniBrand}>교환점</Text>
             <Text style={styles.hello}>안녕하세요 👋</Text>
           </View>
-          <View style={styles.profileCircle}><Text style={styles.profileText}>B</Text></View>
         </View>
         <View style={styles.destinationCard}>
           <Text style={styles.cardEyebrow}>MY EXCHANGE</Text>
@@ -500,17 +608,17 @@ function HomeScreen({ exchangeInfo, onRegister, onFind }) {
           ) : (
             <>
               <Text style={styles.destinationTitle}>아직 파견 정보를 등록하지 않았어요</Text>
-              <Text style={styles.destinationBody}>대학과 학기를 등록하면 같은 파견지의 교환학생을 바로 찾을 수 있어요.</Text>
+              <Text style={styles.destinationBody}>대학과 학기를 등록하면 같은 파견지와 주변 대학의 교환학생을 찾을 수 있어요.</Text>
               <TouchableOpacity style={styles.registerButton} onPress={onRegister}><Text style={styles.registerButtonText}>파견 정보 등록하기</Text></TouchableOpacity>
             </>
           )}
         </View>
         <Text style={styles.sectionTitle}>교환점에서 뭐 할까?</Text>
         <View style={styles.grid}>
-          <QuickCard icon="✈️" title="교환학생 찾기" subtitle="같은 도시 · 대학 · 학기" onPress={onFind} />
-          <QuickCard icon="💬" title="커뮤니티" subtitle="익명으로 질문하고 정보 나누기" />
+          <QuickCard icon="✈️" title="교환학생 찾기" subtitle="같은 대학부터 주변 대학까지" onPress={onFind} />
+          <QuickCard icon="💬" title="커뮤니티" subtitle="완전 익명으로 질문하고 정보 나누기" />
           <QuickCard icon="✓" title="준비 체크" subtitle="비자 · 서류 · 출국 준비" />
-          <QuickCard icon="👤" title="내 정보" subtitle="프로필과 공개 범위" />
+          <QuickCard icon="◎" title="체크인" subtitle="답하고 같은 기수 현황 보기" />
         </View>
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>지금 많이 찾는 이야기</Text>
@@ -560,7 +668,19 @@ function normalizeRorOrganization(item) {
     city: location.name || '',
     country: location.country_name || '',
     countryCode: location.country_code || '',
+    latitude: Number(location.lat),
+    longitude: Number(location.lng),
   };
+}
+
+function distanceKm(lat1, lon1, lat2, lon2) {
+  if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Infinity;
+  const toRad = (value) => value * Math.PI / 180;
+  const earth = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function parseSemester(value) {
@@ -586,8 +706,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
   miniBrand: { fontSize: 15, fontWeight: '800', color: COLORS.green, marginBottom: 5 },
   hello: { fontSize: 26, fontWeight: '800', color: COLORS.text, letterSpacing: -0.8 },
-  profileCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.greenSoft, alignItems: 'center', justifyContent: 'center' },
-  profileText: { color: COLORS.greenDark, fontSize: 17, fontWeight: '800' },
   destinationCard: { backgroundColor: COLORS.green, borderRadius: 24, padding: 22, marginBottom: 28 },
   cardEyebrow: { color: '#DCE8DE', fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10 },
   destinationTitle: { color: COLORS.white, fontSize: 21, fontWeight: '800', lineHeight: 29 },
@@ -649,33 +767,38 @@ const styles = StyleSheet.create({
   matchSummary: { backgroundColor: COLORS.greenSoft, borderRadius: 18, padding: 16, marginBottom: 14 },
   matchSummaryTitle: { color: COLORS.greenDark, fontSize: 16, fontWeight: '800' },
   matchSummaryMeta: { color: COLORS.subtext, fontSize: 12, marginTop: 6 },
-  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+  expandNotice: { backgroundColor: '#EEF1E8', borderRadius: 16, padding: 14, marginBottom: 14 },
+  expandNoticeTitle: { color: COLORS.text, fontSize: 13, fontWeight: '800' },
+  expandNoticeBody: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 5 },
+  expandNoticeLink: { color: COLORS.green, fontSize: 12, fontWeight: '800', marginTop: 8 },
+  filterRow: { gap: 8, paddingBottom: 18 },
   filterChip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.surface },
   filterChipActive: { backgroundColor: COLORS.green, borderColor: COLORS.green },
   filterChipText: { color: COLORS.text, fontSize: 12, fontWeight: '700' },
   filterChipTextActive: { color: COLORS.white },
   resultCount: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginBottom: 12 },
   studentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 18, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: COLORS.line },
-  studentAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.greenSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  studentAvatarText: { color: COLORS.greenDark, fontSize: 18, fontWeight: '800' },
   studentInfo: { flex: 1 },
+  studentTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   studentName: { color: COLORS.text, fontSize: 15, fontWeight: '800' },
+  reasonBadge: { color: COLORS.greenDark, backgroundColor: COLORS.greenSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '800' },
+  homeUniversity: { color: COLORS.green, fontSize: 11, fontWeight: '700', marginTop: 5 },
   studentIntro: { color: COLORS.text, fontSize: 12, marginTop: 6, lineHeight: 18 },
   miniInterestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 6 },
   miniInterest: { color: COLORS.green, fontSize: 11, fontWeight: '700' },
   studentMeta: { color: COLORS.subtext, fontSize: 10, marginTop: 6 },
   studentArrow: { color: COLORS.subtext, fontSize: 24, marginLeft: 8 },
   emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  emptyCard: { padding: 20, borderRadius: 18, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
   emptyTitle: { color: COLORS.text, fontSize: 17, fontWeight: '800' },
   emptyBody: { color: COLORS.subtext, fontSize: 13, lineHeight: 20, marginTop: 8 },
   prototypeNote: { color: COLORS.subtext, fontSize: 11, lineHeight: 17, marginTop: 10, textAlign: 'center' },
   profileContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  profileHero: { alignItems: 'center', paddingVertical: 14, marginBottom: 12 },
-  profileAvatarLarge: { width: 84, height: 84, borderRadius: 42, backgroundColor: COLORS.greenSoft, alignItems: 'center', justifyContent: 'center' },
-  profileAvatarLargeText: { color: COLORS.greenDark, fontSize: 30, fontWeight: '800' },
-  profileName: { marginTop: 14, color: COLORS.text, fontSize: 24, fontWeight: '800' },
-  profilePrivacy: { marginTop: 5, color: COLORS.subtext, fontSize: 12 },
-  profileIntro: { marginTop: 12, color: COLORS.text, fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  profileHero: { alignItems: 'center', paddingVertical: 18, marginBottom: 12 },
+  profileName: { color: COLORS.text, fontSize: 27, fontWeight: '800' },
+  profileHomeUniversity: { marginTop: 5, color: COLORS.green, fontSize: 13, fontWeight: '700' },
+  profilePrivacy: { marginTop: 6, color: COLORS.subtext, fontSize: 12 },
+  profileIntro: { marginTop: 14, color: COLORS.text, fontSize: 14, lineHeight: 21, textAlign: 'center' },
   profileSection: { backgroundColor: COLORS.surface, borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: COLORS.line },
   profileSectionTitle: { color: COLORS.text, fontSize: 16, fontWeight: '800', marginBottom: 10 },
   profileRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: COLORS.line },
