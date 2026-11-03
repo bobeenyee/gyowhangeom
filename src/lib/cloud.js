@@ -64,7 +64,15 @@ export async function loadAccount(userId) {
     supabase.from('exchange_assignments').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('checklist_items').select('item_key,done').eq('user_id', userId),
   ]);
-  const rawProfile = unpack(profileResult);
+  let rawProfile = unpack(profileResult);
+  if (!rawProfile) {
+    const created = unpack(await supabase.from('people_profiles').upsert(
+      { user_id: userId, nickname: '교환학생', discoverable: false },
+      { onConflict: 'user_id', ignoreDuplicates: true }
+    ).select('*').maybeSingle());
+    rawProfile = created || unpack(await supabase.from('people_profiles')
+      .select('*').eq('user_id', userId).single());
+  }
   const rawExchange = unpack(exchangeResult);
   const rawChecks = unpack(checklistResult);
   return {
