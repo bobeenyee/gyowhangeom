@@ -143,10 +143,19 @@ export async function loadPeople(info) {
   }));
 }
 
-export async function loadPosts() {
-  const data = unpack(await supabase.from('posts')
-    .select('id,category,title,body,country_code,city,year,term,university_id,created_at,comments(id,body,created_at)')
-    .order('created_at', { ascending: false }).limit(60));
+export async function loadPosts(exchangeInfo = null, scope = 'all') {
+  if (scope !== 'all' && !exchangeInfo) return [];
+  let query = supabase.from('posts')
+    .select('id,category,title,body,country_code,city,year,term,university_id,created_at,comments(id,body,created_at)');
+  if (scope !== 'all' && exchangeInfo) {
+    const match = exchangeInfo.semester?.match(/^(\d{4})년\s(.+)$/);
+    if (!match) return [];
+    query = query.eq('year', Number(match[1])).eq('term', match[2]);
+    if (scope === 'school') query = query.eq('university_id', exchangeInfo.universityId);
+    else if (scope === 'city') query = query.eq('country_code', exchangeInfo.countryCode).eq('city', exchangeInfo.city);
+    else if (scope === 'country') query = query.eq('country_code', exchangeInfo.countryCode);
+  }
+  const data = unpack(await query.order('created_at', { ascending: false }).limit(60));
   return (data || []).map((row) => ({
     id: row.id,
     category: row.category,
@@ -175,6 +184,12 @@ export async function createPost(post, exchangeInfo) {
 
 export async function createComment(postId, body) {
   unpack(await supabase.rpc('create_anonymous_comment', { p_post_id: postId, p_body: body }));
+}
+
+export async function reportPost(userId, postId, reason) {
+  unpack(await supabase.from('content_reports').insert({
+    reporter_id: userId, post_id: postId, reason,
+  }));
 }
 
 export async function saveCheck(userId, itemKey, done) {
