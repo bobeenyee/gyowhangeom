@@ -6,13 +6,15 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bobeenyee.gyohwanjeom"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#F7F5EE"
       }
     },
-    "owner": "bobeenyees-team"
+    "owner": "bobeenyees-team",
+    "scheme": "gyohwanjeom"
   }
 }
