@@ -15,6 +15,11 @@
       }
     },
     "owner": "bobeenyees-team",
-    "scheme": "gyohwanjeom"
+    "scheme": "gyohwanjeom",
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "baseUrl": "/-"
+    }
   }
 }
