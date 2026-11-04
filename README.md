@@ -1,3 +1,15 @@
+## 웹 미리보기 (아이폰 Safari 공유용)
+
+- **웹 빌드 성공:** `expo export --platform web`으로 React Native Web 정적 페이지 생성 가능
+- 저장소는 `private`이므로 GitHub Pages를 활성화하지 않았으며, 공개 저장소로 바꾸지 않음
+- 현재 CI `Build web preview`가 웹 배포용 정적 산출물(`gyohwanjeom-web-preview`)을 GitHub Actions 아티팩트로 보관
+- 친구에게 Safari로 공유할 실제 웹 URL은 **호스팅 연결 후에만** 생성됨. 현재는 라이브 링크가 없음
+- Vercel 연결을 권장: 기존 비공개 GitHub 저장소를 연결하고 `vercel.json` 설정으로 Expo Web을 빌드하여 미리보기 도메인 배포
+- 웹 페이지를 발행하면 URL을 아는 사람이 사이트에 접속할 수 있으므로, 테스트용 익명 커뮤니티에 민감정보를 쓰지 말 것
+- 친구는 별도 Expo Go 계정을 사용하더라도 **웹 미리보기에서는 Expo 로그인 불필요** (교환점 자체 로그인은 별도)
+- iPhone Expo Go는 개발 서버를 실행한 Expo CLI와 같은 Expo 계정으로 로그인해야 하며, Expo 팀에 참여했다고 다른 계정의 LAN/터널 QR로 개발 서버를 열 수 있는 것은 아님
+- Expo 프로젝트는 앱스토어에 출시하지 않아도 웹에서 별도로 테스트 가능
+
 # 교환점 (Gyohwanjeom)
 
 목적지/파견대학/파견학기로 교환학생을 연결하는 Expo + React Native 앱.
