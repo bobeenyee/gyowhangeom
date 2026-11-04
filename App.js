@@ -217,6 +217,42 @@ export default function App() {
     return () => { active = false; };
   }, [session?.user?.id, communityScope, exchangeInfo?.universityId, exchangeInfo?.city, exchangeInfo?.semester]);
 
+  // Shared Supabase database: updates propagate between different devices without Expo tunnels.
+  // Postgres Changes notifications carry no author identity; re-fetch only the visible feed.
+  useEffect(() => {
+    if (!supabase || !session?.user?.id) return;
+    let active = true;
+    let loading = false;
+    let dirty = false;
+    async function refreshFeed() {
+      if (!active) return;
+      if (loading) { dirty = true; return; }
+      loading = true;
+      try {
+        do {
+          dirty = false;
+          const latest = await loadPosts(exchangeInfo, communityScope);
+          if (active) setPosts(latest);
+        } while (active && dirty);
+      } catch (e) {
+        if (active) console.warn('Could not refresh remote community:', friendlyError(e));
+      } finally {
+        loading = false;
+      }
+    }
+    const subscription = supabase
+      .channel('gyohwanjeom-community-' + session.user.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, refreshFeed)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, refreshFeed)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') refreshFeed();
+      });
+    return () => {
+      active = false;
+      supabase.removeChannel(subscription);
+    };
+  }, [session?.user?.id, communityScope, exchangeInfo?.universityId, exchangeInfo?.city, exchangeInfo?.semester]);
+
   const goHome = () => setScreen('home');
 
   async function refreshCommunity() {
