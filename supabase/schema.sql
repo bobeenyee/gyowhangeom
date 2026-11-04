@@ -69,6 +69,15 @@ create table if not exists private.comment_authors (
 );
 create index if not exists comment_authors_user_idx on private.comment_authors (author_id);
 
+create table if not exists public.content_reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references auth.users(id) on delete cascade,
+  post_id uuid not null references public.posts(id) on delete cascade,
+  reason text not null check (reason in ('spam','harassment','privacy','other')),
+  created_at timestamptz not null default now(),
+  unique(reporter_id,post_id)
+);
+
 create table if not exists public.checklist_items (
   user_id uuid not null references auth.users(id) on delete cascade,
   item_key text not null check (char_length(item_key) between 1 and 60),
@@ -97,14 +106,16 @@ alter table public.exchange_assignments enable row level security;
 alter table public.posts enable row level security;
 alter table public.comments enable row level security;
 alter table public.checklist_items enable row level security;
+alter table public.content_reports enable row level security;
 alter table public.checkin_answers enable row level security;
 
 revoke all on public.people_profiles,public.exchange_assignments,public.posts,
-  public.comments,public.checklist_items,public.checkin_answers from anon,authenticated;
+  public.comments,public.checklist_items,public.checkin_answers,public.content_reports from anon,authenticated;
 
 grant select,insert,update on public.people_profiles,public.exchange_assignments,
   public.checklist_items,public.checkin_answers to authenticated;
 grant select on public.posts,public.comments to authenticated;
+grant select,insert on public.content_reports to authenticated;
 
 drop policy if exists own_profile_select on public.people_profiles;
 create policy own_profile_select on public.people_profiles for select to authenticated
@@ -130,6 +141,13 @@ drop policy if exists post_read_authenticated on public.posts;
 create policy post_read_authenticated on public.posts for select to authenticated using (true);
 drop policy if exists comments_read_authenticated on public.comments;
 create policy comments_read_authenticated on public.comments for select to authenticated using (true);
+
+drop policy if exists own_report_insert on public.content_reports;
+create policy own_report_insert on public.content_reports for insert to authenticated
+  with check (reporter_id = (select auth.uid()));
+drop policy if exists own_report_select on public.content_reports;
+create policy own_report_select on public.content_reports for select to authenticated
+  using (reporter_id = (select auth.uid()));
 
 drop policy if exists own_checklist_select on public.checklist_items;
 create policy own_checklist_select on public.checklist_items for select to authenticated
@@ -185,6 +203,7 @@ create or replace function public.create_anonymous_post(
 ) returns uuid language plpgsql security definer set search_path = ''
 as $$
 declare new_id uuid;
+declare exchange_row public.exchange_assignments%rowtype;
 begin
   if (select auth.uid()) is null then raise exception '로그인이 필요합니다'; end if;
   if p_category not in ('질문','생활','수업','여행메이트')
@@ -195,9 +214,16 @@ begin
       join public.posts p on p.id = a.post_id
       where a.author_id = (select auth.uid()) and p.created_at > now()-interval '1 hour') >= 10
   then raise exception '한 시간 게시글 작성 제한에 도달했습니다'; end if;
+  -- Ignore caller-supplied location; only the signed-in user's assignment may tag a post.
+  select * into exchange_row from public.exchange_assignments
+    where user_id = (select auth.uid());
   insert into public.posts(category,title,body,country_code,city,year,term,university_id)
-  values (p_category,trim(p_title),trim(p_body),left(upper(p_country_code),2),
-          left(p_city,120),p_year,left(p_term,30),left(p_university_id,150))
+  values (p_category,trim(p_title),trim(p_body),
+          coalesce(exchange_row.country_code,''),
+          coalesce(exchange_row.city,''),
+          exchange_row.year,
+          coalesce(exchange_row.term,''),
+          coalesce(exchange_row.university_id,''))
   returning id into new_id;
   insert into private.post_authors(post_id,author_id) values(new_id,(select auth.uid()));
   return new_id;
