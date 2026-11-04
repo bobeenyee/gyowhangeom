@@ -14,6 +14,7 @@ export function AuthScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const [noticeText, setNoticeText] = useState('');
 
   async function submit() {
     if (!email.includes('@') || password.length < 8) {
@@ -22,14 +23,18 @@ export function AuthScreen() {
     }
     setBusy(true);
     setErrorText('');
+    setNoticeText('');
     try {
       if (registering) {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim().toLowerCase(), password,
+          options: Platform.OS === 'web' && typeof window !== 'undefined'
+            ? { emailRedirectTo: `${window.location.origin}/` }
+            : undefined,
         });
         if (error) throw error;
         if (!data.session) {
-          Alert.alert('가입 신청 완료', '이메일 인증을 켠 프로젝트에서는 메일의 확인 링크를 눌러야 로그인할 수 있어요.');
+          setNoticeText('가입 신청이 완료됐어요. 이메일의 확인 링크를 누른 뒤 로그인해 주세요. 인증 후 페이지가 닫혀도 이 화면에서 로그인할 수 있어요.');
           setRegistering(false);
         }
       } else {
@@ -61,12 +66,13 @@ export function AuthScreen() {
             secureTextEntry textContentType={registering ? 'newPassword' : 'password'}
             placeholder="8자 이상" />
           {!!errorText && <Text style={styles.error}>{errorText}</Text>}
+          {!!noticeText && <Text style={styles.notice}>{noticeText}</Text>}
           <TouchableOpacity style={[styles.button, busy && { opacity: 0.6 }]}
             disabled={busy} onPress={submit}>
             {busy ? <ActivityIndicator color="white" /> :
               <Text style={styles.buttonLabel}>{registering ? '회원가입' : '로그인'}</Text>}
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { setErrorText(''); setRegistering((v) => !v); }} style={styles.toggle}>
+          <TouchableOpacity onPress={() => { setErrorText(''); setNoticeText(''); setRegistering((v) => !v); }} style={styles.toggle}>
             <Text style={styles.toggleLabel}>{registering ? '이미 계정이 있어요 · 로그인' : '계정이 없어요 · 회원가입'}</Text>
           </TouchableOpacity>
           <Text style={styles.disclaimer}>
@@ -111,5 +117,6 @@ const styles = StyleSheet.create({
   toggle: { alignItems: 'center', padding: 18 },
   toggleLabel: { color: GREEN, fontWeight: '700' },
   error: { color: '#A34A4A', fontSize: 13, marginBottom: 12, lineHeight: 19 },
+  notice: { color: GREEN, fontSize: 13, lineHeight: 20, marginBottom: 12 },
   disclaimer: { marginTop: 18, lineHeight: 20, color: '#7A837D', fontSize: 12 },
 });
