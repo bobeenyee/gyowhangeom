@@ -41,6 +41,30 @@
 **중요:** 이제 서울 Supabase 프로젝트의 공개용 키가 기본 설정으로 연결되어 있으며, 환경변수가 없더라도 실제 회원가입 화면을 열 수 있습니다.
 미리보기의 사용자·게시글·체크인 통계는 가상의 샘플이며 앱을 재시작하면 상태가 사라질 수 있습니다.
 
+## 가입 단계 · 대학 인증 · 중고거래 DB 적용
+
+[supabase/onboarding_market.sql](supabase/onboarding_market.sql)을 Supabase SQL Editor에서 실행해야 실제 서버에서 동작합니다. **이 코드를 배포하기 전에 먼저 실행하세요.** 적용 전에는 파견 정보 저장과 중고거래가 오류 안내를 표시합니다.
+
+- 이미 가입한 사용자는 가입 단계를 건너뛰고, 새 사용자만 3단계를 거칩니다.
+- 대학 인증은 학교 메일 코드 방식입니다. 아래 **이메일 인증 설정**까지 끝내야 동작합니다.
+- 인증 상태는 사용자가 직접 바꿀 수 없습니다. 도메인 규칙에 맞지 않는 학교는 Table Editor에서 `status`를 `verified`로 바꿔 수동 승인할 수 있습니다.
+
+### 이메일 인증 설정
+
+순서를 지켜 주세요. 5번을 먼저 하면 아무도 인증할 수 없어 글쓰기와 체크인을 쓸 수 없습니다.
+
+1. [supabase/university_email.sql](supabase/university_email.sql)과 [supabase/open_chat.sql](supabase/open_chat.sql)을 SQL Editor에서 실행합니다.
+2. 메일을 보낼 Google 계정에서 2단계 인증을 켜고 [앱 비밀번호](https://myaccount.google.com/apppasswords)를 만듭니다. 전용 계정을 권장합니다.
+3. Supabase **Edge Functions**에서 `send-university-code` 함수를 만들어 [index.js](supabase/functions/send-university-code/index.js) 내용을 붙여넣고, **Verify JWT를 끄고** 배포합니다.
+4. Edge Functions **Secrets**에 `GMAIL_USER`(Gmail 주소)와 `GMAIL_APP_PASSWORD`(앱 비밀번호)를 추가하고, 실제로 코드 메일이 오는지 확인합니다.
+5. [supabase/verified_only.sql](supabase/verified_only.sql)을 실행합니다. 이후 인증하지 않은 사용자는 글·댓글·신고·체크인·체크리스트를 저장할 수 없고 사람찾기 목록에도 나타나지 않습니다.
+6. 코드를 배포합니다.
+
+Gmail은 하루 발송량 제한이 있고 메일이 스팸함으로 갈 수 있어 테스트 단계에 맞는 방식입니다.
+
+허용 도메인은 `*.ac.kr` 같은 `ac.국가코드`, `.edu`, `.edu.국가코드`, `ewhain.net`입니다. 다른 학교는 SQL의 `is_university_email`과 앱의 `isUniversityEmail`에 추가합니다.
+- 중고거래 게시글은 로그인한 사용자 누구나 볼 수 있고, 물건 올리기·대화 시작·메시지 전송은 DB 함수가 `verified` 여부를 확인합니다.
+
 ## 실제 회원/DB 기능 연결 절차
 
 1. **완료:** Supabase 서울 프로젝트 `교환점` 생성 (Project Ref: `dtrkktdxalajyncanzlc`)
