@@ -1,3 +1,38 @@
+## 🚧 남은 작업 (팀원 필독)
+
+**2026-11-05 기준.** 가입 3단계, 학교 메일 인증, 중고거래, 오픈채팅, 검정·라임 디자인은 `feature/verified-onboarding-market` 브랜치에 있고 **아직 `main`에 합치지 않았습니다.**
+
+```bash
+git fetch origin
+git switch feature/verified-onboarding-market
+npm install
+npx expo start --web
+```
+
+**아래 순서를 지켜 주세요.** 인증 메일이 동작하기 전에 4번이나 5번을 하면 아무도 인증할 수 없어 모든 사용자가 글쓰기와 체크인을 쓸 수 없게 됩니다.
+
+- [x] 1. `onboarding_market.sql`, `university_email.sql`, `open_chat.sql` 실행 (실제 서버에 적용 완료)
+- [ ] 2. 메일 보낼 Google 계정에서 2단계 인증을 켜고 [앱 비밀번호](https://myaccount.google.com/apppasswords) 만들기 (전용 계정 권장)
+- [ ] 3. Supabase **Edge Functions**에 메일 함수 올리기
+  - 이름은 `send-university-code`, 내용은 [index.js](supabase/functions/send-university-code/index.js)를 붙여넣고 **Verify JWT는 끄고** 배포
+  - **Secrets**에 `GMAIL_USER`와 `GMAIL_APP_PASSWORD` 추가 (앱 비밀번호는 코드나 채팅에 적지 말 것)
+  - 앱에서 학교 메일로 코드가 오는지 확인. **실제 Gmail 발송은 아직 한 번도 시험하지 못했습니다.**
+- [ ] 4. 메일 확인 후 [verified_only.sql](supabase/verified_only.sql) 실행 (기존 사용자도 인증해야 글을 쓸 수 있게 됨)
+- [ ] 5. PR을 만들어 `main`에 합치기
+
+### 합치기 전에 확인할 것
+
+- [ ] 실제 계정 두 개로 물건 올리기, 중고거래 대화, 오픈채팅 시험
+- [ ] 아이폰 Expo Go에서 실행 (지금까지 웹 화면만 확인함)
+
+### 다음에 할 일
+
+- 오픈채팅 신고·차단·강퇴 (실제 사용자에게 열기 전에 권장)
+- 중고거래 물건 사진
+- 새 메시지 알림 (지금은 대화를 4초마다 새로 불러옴)
+- 앱 아이콘과 시작 화면을 새 로고로 교체
+- 사용자가 늘면 인터넷 주소를 사서 메일 발송 옮기기 (Gmail은 스팸함으로 갈 수 있고 하루 발송량 제한이 있음)
+
 ## 웹 미리보기 (아이폰 Safari 공유용)
 
 - **웹 빌드 성공:** `expo export --platform web`으로 React Native Web 정적 페이지 생성 가능
@@ -51,7 +86,7 @@
 
 ### 이메일 인증 설정
 
-순서를 지켜 주세요. 5번을 먼저 하면 아무도 인증할 수 없어 글쓰기와 체크인을 쓸 수 없습니다.
+새 프로젝트에 처음 설정할 때의 전체 순서입니다. 현재 진행 상황은 맨 위 **남은 작업**을 보세요. 5번을 먼저 하면 아무도 인증할 수 없어 글쓰기와 체크인을 쓸 수 없습니다.
 
 1. [supabase/university_email.sql](supabase/university_email.sql)과 [supabase/open_chat.sql](supabase/open_chat.sql)을 SQL Editor에서 실행합니다.
 2. 메일을 보낼 Google 계정에서 2단계 인증을 켜고 [앱 비밀번호](https://myaccount.google.com/apppasswords)를 만듭니다. 전용 계정을 권장합니다.
