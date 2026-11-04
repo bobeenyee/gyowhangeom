@@ -18,8 +18,7 @@
     "scheme": "gyohwanjeom",
     "web": {
       "bundler": "metro",
-      "output": "single",
-      "baseUrl": "/-"
+      "output": "single"
     }
   }
 }
