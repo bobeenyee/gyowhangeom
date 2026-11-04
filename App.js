@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { AuthScreen, SetupScreen } from './src/components/AuthScreen';
+import { searchUniversities } from './src/lib/universitySearch';
 import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
 
 const COLORS = {
@@ -379,20 +380,32 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
 
   useEffect(() => {
     const query = schoolQuery.trim();
-    if (selectedUniversity && query === selectedUniversity.name) { setResults([]); setSearching(false); return; }
-    if (query.length < 2) { setResults([]); setSearching(false); setSearchError(''); return; }
+    if (selectedUniversity && query === selectedUniversity.name) {
+      setResults([]); setSearching(false); setSearchError(''); return;
+    }
+    if (query.length < 2) {
+      setResults([]); setSearching(false); setSearchError(''); return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    setSearching(true);
+    setSearchError('');
+    setResults([]);
     const timer = setTimeout(async () => {
       try {
-        setSearching(true); setSearchError('');
-        const response = await fetch(`https://api.ror.org/v2/organizations?query=${encodeURIComponent(query)}&filter=types:education`);
-        if (!response.ok) throw new Error('search failed');
-        const data = await response.json();
-        setResults((data.items || []).slice(0, 8).map(normalizeRorOrganization));
+        const found = await searchUniversities(query, controller.signal);
+        if (!active) return;
+        setResults(found);
+        setSearchError(found.length === 0 ? '검색 결과가 없어요. 다른 표기나 영문 이름으로 검색해 보세요.' : '');
       } catch (error) {
-        setResults([]); setSearchError('대학 검색에 실패했어요. 잠시 후 다시 시도해 주세요.');
-      } finally { setSearching(false); }
-    }, 350);
-    return () => clearTimeout(timer);
+        if (!active || error?.name === 'AbortError') return;
+        setResults([]);
+        setSearchError('검색 연결에 실패했어요. 인터넷을 확인하고 다시 검색해 주세요.');
+      } finally {
+        if (active) setSearching(false);
+      }
+    }, 450);
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
   }, [schoolQuery, selectedUniversity]);
 
   const semester = `${year}년 ${term}`;
@@ -404,12 +417,13 @@ function ExchangeRegistrationScreen({ initialValue, onCancel, onSave }) {
         <TopHeader title="파견 정보 등록" onBack={onCancel} backLabel="취소" />
         <View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>파견 대학</Text>
-          <TextInput style={styles.input} value={schoolQuery} onChangeText={(text) => { setSchoolQuery(text); if (!selectedUniversity || text !== selectedUniversity.name) setSelectedUniversity(null); }} placeholder="대학 이름 또는 약자를 검색하세요" placeholderTextColor="#A1A7A2" autoCapitalize="none" autoCorrect={false} />
+          <TextInput style={styles.input} value={schoolQuery} onChangeText={(text) => { setSchoolQuery(text); if (!selectedUniversity || text !== selectedUniversity.name) setSelectedUniversity(null); }} placeholder="예: 코펜하겐대학교 / University of Copenhagen" placeholderTextColor="#A1A7A2" autoCapitalize="none" autoCorrect={false} />
           {searching && <View style={styles.searchStatusRow}><ActivityIndicator size="small" color={COLORS.green} /><Text style={styles.searchStatusText}>전 세계 대학 검색 중...</Text></View>}
           {!!searchError && <Text style={styles.searchError}>{searchError}</Text>}
           {results.length > 0 && <View style={styles.searchResultsBox}>{results.map((item) => (
             <TouchableOpacity key={item.id} style={styles.searchResultItem} onPress={() => { setSelectedUniversity(item); setSchoolQuery(item.name); setResults([]); }}>
-              <Text style={styles.searchResultName}>{item.name}</Text>
+              <Text style={styles.searchResultName}>{item.koreanLabel || item.name}</Text>
+              {!!item.koreanLabel && item.koreanLabel !== item.name && <Text style={styles.searchResultLocation}>{item.name}</Text>}
               <Text style={styles.searchResultLocation}>{[item.city, item.country].filter(Boolean).join(', ')}</Text>
             </TouchableOpacity>
           ))}</View>}
@@ -700,11 +714,6 @@ function QuickCard({ icon, title, subtitle, onPress }) { return <TouchableOpacit
 function BottomNav({ active, onHome, onFind, onCommunity, onMy }) { return <View style={styles.bottomNav}><NavItem label="홈" icon="⌂" active={active === 'home'} onPress={onHome} /><NavItem label="찾기" icon="⌕" active={active === 'find'} onPress={onFind} /><NavItem label="커뮤니티" icon="◫" active={active === 'community'} onPress={onCommunity} /><NavItem label="마이" icon="○" active={active === 'my'} onPress={onMy} /></View>; }
 function NavItem({ label, icon, active, onPress }) { return <TouchableOpacity style={styles.navItem} onPress={onPress}><Text style={[styles.navIcon, active && styles.navActive]}>{icon}</Text><Text style={[styles.navLabel, active && styles.navActive]}>{label}</Text></TouchableOpacity>; }
 
-function normalizeRorOrganization(item) {
-  const displayName = item.names?.find((name) => name.types?.includes('ror_display'))?.value || item.names?.[0]?.value || '이름 없는 기관';
-  const location = item.locations?.[0]?.geonames_details || {};
-  return { id: item.id, name: displayName, city: location.name || '', country: location.country_name || '', countryCode: location.country_code || '', latitude: typeof location.lat === 'number' ? location.lat : null, longitude: typeof location.lng === 'number' ? location.lng : null };
-}
 function parseSemester(value) { const match = typeof value === 'string' ? value.match(/^(\d{4})년\s(.+)$/) : null; const parsedYear = Number(match?.[1]); const parsedTerm = match?.[2]; return { year: YEARS.includes(parsedYear) ? parsedYear : 2027, term: TERMS.includes(parsedTerm) ? parsedTerm : '1학기' }; }
 function getMatchReason(user, exchangeInfo) { if (user.universityId === exchangeInfo.universityId) return '같은 대학'; if (user.city?.toLowerCase() === exchangeInfo.city?.toLowerCase()) return '같은 도시'; if (user.distanceKm != null && user.distanceKm <= 30) return '약 ' + Math.round(user.distanceKm) + 'km'; return '같은 국가'; }
 function splitTags(value) { return value.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 8); }
