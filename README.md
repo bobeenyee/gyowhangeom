@@ -2,6 +2,18 @@
 
 목적지/파견대학/파견학기로 교환학생을 연결하는 Expo + React Native 앱.
 
+
+## 원격 공동 개발 (서로 다른 도시에서도 가능)
+
+**[REMOTE_COLLAB.md](REMOTE_COLLAB.md)** 문서에 친구의 최초 GitHub Clone, VS Code 설치, Expo 계정/조직 초대, 아이폰 QR 실행, 코드 Pull/Push, Supabase 실시간 연동 테스트를 단계별로 정리했습니다.
+
+- 두 사람은 같은 장소나 같은 Wi-Fi를 쓸 필요가 없습니다. **각자 PC와 각자 아이폰**만 같은 Wi-Fi면 됩니다.
+- 각자 터미널에서 `npx.cmd expo start --clear --lan` 실행 후 **자기 PC의 QR**을 자기 아이폰으로 스캔하세요.
+- Expo 계정은 서로의 계정을 공유하지 않고 각자 사용하세요. 앱 내부 가입 계정도 별개입니다.
+- 서로 다른 네트워크에서도 두 아이폰은 공통 Supabase 서버에 연결되며, 커뮤니티 글/댓글은 Realtime 알림으로 다시 불러옵니다(연결이 끊기면 수동 새로고침 가능).
+- Expo `--tunnel`은 이미 DNS `ENOTFOUND` 오류를 경험해 기본 개발 방식으로 추천하지 않습니다.
+- 상대방의 LAN QR을 다른 도시에서 열 수는 없습니다. PC 없이 배포 앱을 이용하려면 별도 EAS Development Build/내부 배포가 필요합니다.
+
 ## 현재 기능
 
 - Expo SDK 58 / React Native 0.88, iOS·Android 공통
@@ -30,7 +42,7 @@
 5. GitHub Desktop에서 Pull 한 후 프로젝트 루트 터미널 실행:
 
    npm.cmd install
-   npx.cmd expo start --clear --tunnel
+   npx.cmd expo start --clear --lan
 
 6. 아이폰 Expo Go에서 새로운 QR 스캔 → **교환점 자체 이메일 회원가입** (Expo 계정과 별개)
 7. 이메일 확인을 요구하는 Supabase 프로젝트라면 가입 확인 메일을 승인하고 로그인
@@ -83,7 +95,7 @@ EXPO_PUBLIC_ 변수는 앱 내부에 포함되므로 비밀로 취급할 수 없
     npm.cmd install
     npx.cmd expo start
 
-Expo Go QR 접속에 서로 다른 와이파이를 쓰면 --tunnel 사용.
+Expo Go QR은 해당 컴퓨터와 같은 로컬 Wi-Fi의 아이폰에서 열기. 다른 장소에 있는 친구는 자기 컴퓨터에서 별도 LAN 서버를 시작할 것.
 
 ## 개발자가 다음으로 할 일
 
@@ -121,3 +133,10 @@ Expo Go QR 접속에 서로 다른 와이파이를 쓰면 --tunnel 사용.
 - 임시 트랜잭션 `ROLLBACK` 테스트에서 익명 게시글 RPC의 위조 지역 무시 및 신고 기록 삽입 확인.
 - 공개 전 보안 권고: 4개의 `SECURITY DEFINER` RPC 점검 및 Auth leaked password protection 활성화. 현시점 보안 감사를 완료한 것은 아님.
 - 로그인 인증 메일의 기존 기본 리다이렉트(`localhost:3000`)는 앱 딥링크로 아직 정비하지 않았으므로, 메일 확인 후 교환점 앱에 돌아와 로그인할 것.
+
+## 공동 작업 실시간 연결 상태 (2026-11-04)
+
+- Expo 조직 owner 설정: `bobeenyees-team` (app.json)
+- Supabase `supabase_realtime` publication에 `public.posts`, `public.comments` 등록 확인
+- 로그인 중인 앱에서 게시글/댓글 INSERT 이벤트 감지 시 현재 커뮤니티 범위 재조회
+- 두 장소·두 기기 실제 작동 검증은 아직 필요하며, GitHub Actions에서 iOS JS 번들 빌드 검증은 성공
