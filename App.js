@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { AuthScreen, SetupScreen } from './src/components/AuthScreen';
 import { searchUniversities } from './src/lib/universitySearch';
-import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
+import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
 
 const COLORS = {
   background: '#F7F5EE',
@@ -129,6 +129,8 @@ export default function App() {
   const [exchangeInfo, setExchangeInfo] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [posts, setPosts] = useState(isCloudConfigured ? [] : INITIAL_POSTS);
+  const [communityScope, setCommunityScope] = useState('all');
+  const [postsLoading, setPostsLoading] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
   const [checkinAnswer, setCheckinAnswer] = useState('');
@@ -204,11 +206,22 @@ export default function App() {
     return () => { active = false; };
   }, [session?.user?.id, exchangeInfo?.universityId, exchangeInfo?.semester, exchangeInfo?.city]);
 
+  useEffect(() => {
+    if (!supabase || !session?.user?.id) return;
+    let active = true;
+    setPostsLoading(true);
+    loadPosts(exchangeInfo, communityScope)
+      .then((items) => { if (active) setPosts(items); })
+      .catch((e) => { if (active) Alert.alert('게시글 불러오기 실패', friendlyError(e)); })
+      .finally(() => { if (active) setPostsLoading(false); });
+    return () => { active = false; };
+  }, [session?.user?.id, communityScope, exchangeInfo?.universityId, exchangeInfo?.city, exchangeInfo?.semester]);
+
   const goHome = () => setScreen('home');
 
   async function refreshCommunity() {
     if (!supabase) return;
-    try { setPosts(await loadPosts()); } catch (e) { Alert.alert('새로고침 실패', friendlyError(e)); }
+    try { setPosts(await loadPosts(exchangeInfo, communityScope)); } catch (e) { Alert.alert('새로고침 실패', friendlyError(e)); }
   }
 
   async function refreshPeople() {
@@ -243,7 +256,7 @@ export default function App() {
     if (supabase) {
       try {
         await createPost(post, exchangeInfo);
-        setPosts(await loadPosts());
+        setPosts(await loadPosts(exchangeInfo, communityScope));
       } catch (e) { Alert.alert('글 작성 실패', friendlyError(e)); return; }
     } else {
       setPosts((prev) => [{ ...post, id: 'preview' + Date.now(), likes: 0, comments: [], time: '방금' }, ...prev]);
@@ -253,11 +266,32 @@ export default function App() {
 
   async function submitComment(text) {
     if (supabase) {
-      try { await createComment(selectedPostId, text); setPosts(await loadPosts()); }
+      try { await createComment(selectedPostId, text); setPosts(await loadPosts(exchangeInfo, communityScope)); }
       catch (e) { Alert.alert('댓글 작성 실패', friendlyError(e)); throw e; }
     } else {
       setPosts((prev) => prev.map((item) =>
         item.id === selectedPostId ? { ...item, comments: [...item.comments, text] } : item));
+    }
+  }
+
+  function confirmReport(postId) {
+    if (!supabase) return;
+    Alert.alert('게시글 신고', '신고 사유를 선택해 주세요.', [
+      { text: '취소', style: 'cancel' },
+      { text: '스팸·광고', onPress: () => submitReport(postId, 'spam') },
+      { text: '괴롭힘·혐오', onPress: () => submitReport(postId, 'harassment') },
+      { text: '개인정보 노출', onPress: () => submitReport(postId, 'privacy') },
+      { text: '기타', onPress: () => submitReport(postId, 'other') },
+    ]);
+  }
+
+  async function submitReport(postId, reason) {
+    try {
+      await cloudReportPost(session.user.id, postId, reason);
+      Alert.alert('신고 접수', '신고가 저장됐어요. 운영 검토 체계는 정비 중입니다.');
+    } catch (e) {
+      const duplicate = e?.code === '23505';
+      Alert.alert('신고 처리', duplicate ? '이미 신고한 게시글이에요.' : friendlyError(e));
     }
   }
 
@@ -330,14 +364,14 @@ export default function App() {
     return <StudentProfileScreen user={selectedUser} onBack={() => setScreen('find')} />;
   }
   if (screen === 'community') {
-    return <CommunityScreen posts={posts} onRefresh={isCloudConfigured ? refreshCommunity : null} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => { setSelectedPostId(id); setScreen('postDetail'); }} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
+    return <CommunityScreen posts={posts} scope={communityScope} onChangeScope={setCommunityScope} exchangeInfo={exchangeInfo} loading={postsLoading} onRefresh={isCloudConfigured ? refreshCommunity : null} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => { setSelectedPostId(id); setScreen('postDetail'); }} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
   }
   if (screen === 'writePost') {
     return <WritePostScreen onCancel={() => setScreen('community')} onSubmit={submitPost} />;
   }
   if (screen === 'postDetail') {
     const post = posts.find((item) => item.id === selectedPostId);
-    return <PostDetailScreen post={post} onBack={() => setScreen('community')} onAddComment={submitComment} />;
+    return <PostDetailScreen post={post} onBack={() => setScreen('community')} onAddComment={submitComment} onReport={isCloudConfigured ? confirmReport : null} />;
   }
   if (screen === 'checkin') {
     return <CheckInScreen exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={submitCheckin} responses={isCloudConfigured ? checkinSummary : CHECKIN_RESPONSES} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshCheckin : null} onBack={goHome} />;
@@ -562,20 +596,42 @@ function StudentProfileScreen({ user, onBack }) {
   );
 }
 
-function CommunityScreen({ posts, onRefresh, onHome, onWrite, onOpen, onMy, onFind }) {
+function CommunityScreen({ posts, scope, onChangeScope, exchangeInfo, loading, onRefresh, onHome, onWrite, onOpen, onMy, onFind }) {
   const [category, setCategory] = useState('전체');
   const categories = ['전체', '질문', '생활', '수업', '여행메이트'];
   const visible = category === '전체' ? posts : posts.filter((post) => post.category === category);
+  const areas = [
+    ['all', '전체 지역'],
+    ...(exchangeInfo ? [
+      ['school', '같은 대학'],
+      ['city', '같은 도시'],
+      ['country', '같은 국가'],
+    ] : []),
+  ];
   return (
     <Screen>
       <View style={styles.communityHeader}><View><Text style={styles.miniBrand}>교환점</Text><Text style={styles.pageTitle}>익명 커뮤니티</Text></View><TouchableOpacity style={styles.writeButton} onPress={onWrite}><Text style={styles.writeButtonText}>글쓰기</Text></TouchableOpacity></View>
-      <ScrollView contentContainerStyle={styles.communityContent} showsVerticalScrollIndicator={false}>{onRefresh && <TouchableOpacity onPress={onRefresh}><Text style={[styles.moreText, { marginBottom: 12 }]}>↻ 새 게시글 불러오기</Text></TouchableOpacity>}
+      <ScrollView contentContainerStyle={styles.communityContent} showsVerticalScrollIndicator={false}>
+        {onRefresh && <TouchableOpacity onPress={onRefresh}><Text style={[styles.moreText, { marginBottom: 12 }]}>↻ 새 게시글 불러오기</Text></TouchableOpacity>}
         <View style={styles.anonymousBanner}><Text style={styles.anonymousTitle}>닉네임 없이 질문하고 답해요</Text><Text style={styles.anonymousBody}>게시글에는 사람찾기 프로필을 표시하지 않아요. 서비스 운영상 작성자 확인 기록은 별도로 관리돼요.</Text></View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>{categories.map((item) => <TouchableOpacity key={item} onPress={() => setCategory(item)} style={[styles.filterChip, category === item && styles.filterChipActive]}><Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text></TouchableOpacity>)}</ScrollView>
+        <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>어느 지역의 글을 볼까요?</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {areas.map(([key, label]) => <TouchableOpacity key={key} onPress={() => onChangeScope(key)} style={[styles.filterChip, scope === key && styles.filterChipActive]}>
+            <Text style={[styles.filterChipText, scope === key && styles.filterChipTextActive]}>{label}</Text>
+          </TouchableOpacity>)}
+        </ScrollView>
+        {!exchangeInfo && <Text style={styles.prototypeNote}>파견 대학을 등록하면 같은 대학·도시·국가의 글만 골라 볼 수 있어요.</Text>}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {categories.map((item) => <TouchableOpacity key={item} onPress={() => setCategory(item)} style={[styles.filterChip, category === item && styles.filterChipActive]}>
+            <Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text>
+          </TouchableOpacity>)}
+        </ScrollView>
+        {loading && <ActivityIndicator style={{ marginTop: 20 }} color={COLORS.green} />}
+        {!loading && visible.length === 0 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>아직 이 조건에 맞는 글이 없어요</Text><Text style={styles.noticeBody}>첫 질문을 작성하거나 검색 범위를 넓혀 보세요.</Text></View>}
         {visible.map((post) => <TouchableOpacity key={post.id} style={styles.communityPost} onPress={() => onOpen(post.id)}>
           <View style={styles.inlineRow}><Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postTime}>{post.time}</Text></View>
           <Text style={styles.postTitle}>{post.title}</Text><Text numberOfLines={2} style={styles.postBody}>{post.body}</Text>
-          <Text style={styles.postMeta}>익명 · {post.meta} · 공감 {post.likes} · 댓글 {post.comments.length}</Text>
+          <Text style={styles.postMeta}>익명 · {post.meta} · 댓글 {post.comments.length}</Text>
         </TouchableOpacity>)}
       </ScrollView>
       <BottomNav active="community" onHome={onHome} onFind={onFind} onCommunity={() => {}} onMy={onMy} />
@@ -598,12 +654,13 @@ function WritePostScreen({ onCancel, onSubmit }) {
   );
 }
 
-function PostDetailScreen({ post, onBack, onAddComment }) {
+function PostDetailScreen({ post, onBack, onAddComment, onReport }) {
   const [comment, setComment] = useState('');
   if (!post) return <Screen><TopHeader title="게시글" onBack={onBack} /><View style={styles.emptyState}><Text>게시글을 찾을 수 없어요.</Text></View></Screen>;
   return (
     <Screen><TopHeader title="게시글" onBack={onBack} backLabel="‹ 커뮤니티" /><ScrollView contentContainerStyle={styles.postDetailContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postDetailTitle}>{post.title}</Text><Text style={styles.postDetailMeta}>익명 · {post.meta} · {post.time}</Text><Text style={styles.postDetailBody}>{post.body}</Text>
+      {onReport && <TouchableOpacity onPress={() => onReport(post.id)} style={{ alignSelf: "flex-end", paddingVertical: 12 }}><Text style={styles.moreText}>게시글 신고</Text></TouchableOpacity>}
       <Text style={styles.commentHeader}>댓글 {post.comments.length}</Text>
       {post.comments.map((item, index) => <View key={`${item}-${index}`} style={styles.commentCard}><Text style={styles.commentAuthor}>익명{index + 1}</Text><Text style={styles.commentText}>{item}</Text></View>)}
       <View style={styles.commentInputRow}><TextInput style={styles.commentInput} value={comment} onChangeText={setComment} placeholder="익명 댓글 입력" placeholderTextColor="#A1A7A2" /><TouchableOpacity style={styles.commentSend} onPress={async () => { if (!comment.trim()) return; try { await onAddComment(comment.trim()); setComment(''); } catch (_e) { /* caller displays error */ } }}><Text style={styles.commentSendText}>등록</Text></TouchableOpacity></View>
