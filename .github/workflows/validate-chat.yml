@@ -1,7 +1,7 @@
-name: Validate chat safety feature
+name: Validate exchange community UI
 on:
   push:
-    branches: [feature/chat-moderation-safety]
+    branches: [feature/exchange-community-navigation]
   workflow_dispatch:
 
 permissions:

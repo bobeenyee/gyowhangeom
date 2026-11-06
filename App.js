@@ -14,6 +14,11 @@ import {
 } from 'react-native';
 import { AuthScreen, SetupScreen } from './src/components/AuthScreen';
 import { ChatSafetyPanel } from './src/components/ChatSafetyPanel';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  COMMUNITY_BOARDS, DEFAULT_FAVORITE_BOARDS, COMMUNITY_ALL_TERMS,
+  FavoriteBoardSection, CommunityScopeSelector, CompactCommunityPost, HomeCommunitySection, boardTitle,
+} from './src/components/ExchangeCommunitySections';
 import { COLORS } from './src/theme';
 import { searchUniversities } from './src/lib/universitySearch';
 import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveInterest as cloudSaveInterest, completeOnboarding as cloudCompleteOnboarding, isUniversityEmail, requestUniversityCode, confirmUniversityCode, loadListings, createListing as cloudCreateListing, setListingStatus as cloudSetListingStatus, startChat as cloudStartChat, loadChats, loadMessages as cloudLoadMessages, sendMessage as cloudSendMessage, loadOpenChatRooms, createOpenChatRoom, joinOpenChatRoom, leaveOpenChatRoom, loadOpenChatMessages, sendOpenChatMessage, reportOpenChatMessage, blockOpenChatUser, loadBlockedOpenChatUsers, unblockOpenChatUser, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
@@ -159,6 +164,11 @@ export default function App() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [posts, setPosts] = useState(isCloudConfigured ? [] : INITIAL_POSTS);
   const [communityScope, setCommunityScope] = useState('all');
+  const [communityBoard, setCommunityBoard] = useState('전체');
+  const [communitySemester, setCommunitySemester] = useState(null);
+  const [favoriteBoards, setFavoriteBoards] = useState(DEFAULT_FAVORITE_BOARDS);
+  const [favoritesForAccount, setFavoritesForAccount] = useState(null);
+  const [postReturnScreen, setPostReturnScreen] = useState('community');
   const [postsLoading, setPostsLoading] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
@@ -174,6 +184,36 @@ export default function App() {
     style: ['계획형', '주말여행 자주'],
   });
 
+
+  const activeCommunitySemester = communitySemester || exchangeInfo?.semester || COMMUNITY_ALL_TERMS;
+  const favoriteStorageKey = 'gyohwanjeom:favorites:' + (session?.user?.id || 'preview');
+
+  useEffect(() => {
+    let active = true;
+    setFavoritesForAccount(null);
+    AsyncStorage.getItem(favoriteStorageKey).then((saved) => {
+      if (!active) return;
+      let boards = DEFAULT_FAVORITE_BOARDS;
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) boards = parsed.filter((key) => COMMUNITY_BOARDS.some((item) => item.key === key));
+        } catch (e) { console.warn('Could not read favorite boards', e); }
+      }
+      setFavoriteBoards(boards);
+      setFavoritesForAccount(favoriteStorageKey);
+    }).catch((e) => {
+      console.warn('Favorite board settings could not be loaded', e);
+      if (active) setFavoritesForAccount(favoriteStorageKey);
+    });
+    return () => { active = false; };
+  }, [favoriteStorageKey]);
+
+  useEffect(() => {
+    if (favoritesForAccount !== favoriteStorageKey) return;
+    AsyncStorage.setItem(favoriteStorageKey, JSON.stringify(favoriteBoards))
+      .catch((e) => console.warn('Favorite board settings could not be saved', e));
+  }, [favoriteBoards, favoritesForAccount, favoriteStorageKey]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -242,12 +282,12 @@ export default function App() {
     if (!supabase || !session?.user?.id) return;
     let active = true;
     setPostsLoading(true);
-    loadPosts(exchangeInfo, communityScope)
+    loadPosts(exchangeInfo, communityScope, activeCommunitySemester)
       .then((items) => { if (active) setPosts(items); })
       .catch((e) => { if (active) Alert.alert('게시글 불러오기 실패', friendlyError(e)); })
       .finally(() => { if (active) setPostsLoading(false); });
     return () => { active = false; };
-  }, [session?.user?.id, communityScope, exchangeInfo?.universityId, exchangeInfo?.city, exchangeInfo?.semester]);
+  }, [session?.user?.id, communityScope, activeCommunitySemester, exchangeInfo?.universityId, exchangeInfo?.city, exchangeInfo?.semester]);
 
   // Shared Supabase database: updates propagate between different devices without Expo tunnels.
   // Postgres Changes notifications carry no author identity; re-fetch only the visible feed.
@@ -263,7 +303,7 @@ export default function App() {
       try {
         do {
           dirty = false;
-          const latest = await loadPosts(exchangeInfo, communityScope);
+          const latest = await loadPosts(exchangeInfo, communityScope, activeCommunitySemester);
           if (active) setPosts(latest);
         } while (active && dirty);
       } catch (e) {
@@ -283,11 +323,26 @@ export default function App() {
       active = false;
       supabase.removeChannel(subscription);
     };
-  }, [session?.user?.id, communityScope, exchangeInfo?.universityId, exchangeInfo?.city, exchangeInfo?.semester]);
+  }, [session?.user?.id, communityScope, activeCommunitySemester, exchangeInfo?.universityId, exchangeInfo?.city, exchangeInfo?.semester]);
 
   useEffect(() => { refreshMarket(); }, [session?.user?.id, reloadToken]);
 
   const goHome = () => setScreen('home');
+  const openCommunityBoard = (board = '전체') => {
+    setCommunityBoard(board);
+    setScreen('community');
+  };
+  const toggleFavoriteBoard = (board) => {
+    if (!COMMUNITY_BOARDS.some((item) => item.key === board)) return;
+    setFavoriteBoards((current) => current.includes(board)
+      ? current.filter((item) => item !== board)
+      : [...current, board]);
+  };
+  const openCommunityPost = (postId, from = 'community') => {
+    setSelectedPostId(postId);
+    setPostReturnScreen(from);
+    setScreen('postDetail');
+  };
   const isVerified = verification?.status === 'verified';
   const askVerify = (from) => { setVerifyReturn(from); setScreen('verify'); };
   const openMarket = () => { refreshMarket(); setScreen('market'); };
@@ -295,7 +350,7 @@ export default function App() {
 
   async function refreshCommunity() {
     if (!supabase) return;
-    try { setPosts(await loadPosts(exchangeInfo, communityScope)); } catch (e) { Alert.alert('새로고침 실패', friendlyError(e)); }
+    try { setPosts(await loadPosts(exchangeInfo, communityScope, activeCommunitySemester)); } catch (e) { Alert.alert('새로고침 실패', friendlyError(e)); }
   }
 
   async function refreshPeople() {
@@ -481,7 +536,7 @@ export default function App() {
     if (supabase) {
       try {
         await createPost(post, exchangeInfo);
-        setPosts(await loadPosts(exchangeInfo, communityScope));
+        setPosts(await loadPosts(exchangeInfo, communityScope, activeCommunitySemester));
       } catch (e) { Alert.alert('글 작성 실패', friendlyError(e)); return; }
     } else {
       setPosts((prev) => [{ ...post, id: 'preview' + Date.now(), likes: 0, comments: [], time: '방금' }, ...prev]);
@@ -491,7 +546,7 @@ export default function App() {
 
   async function submitComment(text) {
     if (supabase) {
-      try { await createComment(selectedPostId, text); setPosts(await loadPosts(exchangeInfo, communityScope)); }
+      try { await createComment(selectedPostId, text); setPosts(await loadPosts(exchangeInfo, communityScope, activeCommunitySemester)); }
       catch (e) { Alert.alert('댓글 작성 실패', friendlyError(e)); throw e; }
     } else {
       setPosts((prev) => prev.map((item) =>
@@ -633,15 +688,15 @@ export default function App() {
     return <StudentProfileScreen user={selectedUser} verified={isVerified} onVerify={() => askVerify('profile')} onBack={() => setScreen('find')} />;
   }
   if (screen === 'community') {
-    return <CommunityScreen posts={posts} scope={communityScope} onChangeScope={setCommunityScope} exchangeInfo={exchangeInfo} loading={postsLoading} onRefresh={isCloudConfigured ? refreshCommunity : null} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => { setSelectedPostId(id); setScreen('postDetail'); }} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
+    return <CommunityScreen posts={posts} scope={communityScope} onChangeScope={setCommunityScope} exchangeInfo={exchangeInfo} semester={activeCommunitySemester} onChangeSemester={setCommunitySemester} category={communityBoard} onChangeCategory={setCommunityBoard} favorites={favoriteBoards} onToggleFavorite={toggleFavoriteBoard} loading={postsLoading} onRefresh={isCloudConfigured ? refreshCommunity : null} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => openCommunityPost(id)} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
   }
   if (screen === 'writePost') {
     if (!isVerified) return <VerifyGateScreen title="글쓰기" message="글은 누구나 읽을 수 있지만, 쓰려면 대학 인증이 필요해요." onBack={() => setScreen('community')} onVerify={() => askVerify('writePost')} />;
-    return <WritePostScreen onCancel={() => setScreen('community')} onSubmit={submitPost} />;
+    return <WritePostScreen initialCategory={communityBoard} onCancel={() => setScreen('community')} onSubmit={submitPost} />;
   }
   if (screen === 'postDetail') {
     const post = posts.find((item) => item.id === selectedPostId);
-    return <PostDetailScreen post={post} verified={isVerified} onVerify={() => askVerify('postDetail')} onBack={() => setScreen('community')} onAddComment={submitComment} onReport={isCloudConfigured && isVerified ? confirmReport : null} />;
+    return <PostDetailScreen post={post} verified={isVerified} onVerify={() => askVerify('postDetail')} onBack={() => setScreen(postReturnScreen)} onAddComment={submitComment} onReport={isCloudConfigured && isVerified ? confirmReport : null} />;
   }
   if (screen === 'checkin') {
     return <CheckInScreen verified={isVerified} onVerify={() => askVerify('checkin')} exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={submitCheckin} responses={isCloudConfigured ? checkinSummary : CHECKIN_RESPONSES} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshCheckin : null} onBack={goHome} />;
@@ -663,7 +718,12 @@ export default function App() {
       profile={profile}
       onRegister={() => setScreen('register')}
       onFind={() => setScreen('find')}
-      onCommunity={() => setScreen('community')}
+      onCommunity={() => openCommunityBoard('전체')}
+      onFavoriteBoard={openCommunityBoard}
+      onToggleFavorite={toggleFavoriteBoard}
+      favorites={favoriteBoards}
+      onOpenPost={(id) => openCommunityPost(id, 'home')}
+      communitySemester={activeCommunitySemester}
       onCheckin={() => setScreen('checkin')}
       onChecklist={() => setScreen('checklist')}
       onMy={() => setScreen('my')}
@@ -927,51 +987,85 @@ function StudentProfileScreen({ user, verified, onVerify, onBack }) {
   );
 }
 
-function CommunityScreen({ posts, scope, onChangeScope, exchangeInfo, loading, onRefresh, onHome, onWrite, onOpen, onMy, onFind }) {
-  const [category, setCategory] = useState('전체');
-  const categories = ['전체', '질문', '생활', '수업', '여행메이트'];
+function CommunityScreen({
+  posts, scope, onChangeScope, exchangeInfo, semester, onChangeSemester,
+  loading, onRefresh, onHome, onWrite, onOpen, onMy, onFind,
+  category, onChangeCategory, favorites, onToggleFavorite,
+}) {
+  const [sortBy, setSortBy] = useState('new');
   const visible = category === '전체' ? posts : posts.filter((post) => post.category === category);
-  const areas = [
-    ['all', '전체 지역'],
-    ...(exchangeInfo ? [
-      ['school', '같은 대학'],
-      ['city', '같은 도시'],
-      ['country', '같은 국가'],
-    ] : []),
-  ];
+  const ordered = sortBy === 'replies'
+    ? [...visible].sort((a, b) => (b.comments?.length || 0) - (a.comments?.length || 0))
+    : visible;
+
   return (
     <Screen>
-      <View style={styles.communityHeader}><View><Text style={styles.miniBrand}>교환점.</Text><Text style={styles.pageTitle}>익명 커뮤니티</Text></View><TouchableOpacity style={styles.writeButton} onPress={onWrite}><Text style={styles.writeButtonText}>글쓰기</Text></TouchableOpacity></View>
+      <View style={styles.communityHeader}>
+        <View><Text style={styles.miniBrand}>교환점.</Text><Text style={styles.pageTitle}>게시판</Text></View>
+        <TouchableOpacity accessibilityRole="button" style={styles.writeButton} onPress={onWrite}>
+          <Text style={styles.writeButtonText}>＋ 글쓰기</Text>
+        </TouchableOpacity>
+      </View>
       <ScrollView contentContainerStyle={styles.communityContent} showsVerticalScrollIndicator={false}>
-        {onRefresh && <TouchableOpacity onPress={onRefresh}><Text style={[styles.moreText, { marginBottom: 12 }]}>↻ 새 게시글 불러오기</Text></TouchableOpacity>}
-        <View style={styles.anonymousBanner}><Text style={styles.anonymousTitle}>닉네임 없이 질문하고 답해요</Text><Text style={styles.anonymousBody}>게시글에는 사람찾기 프로필을 표시하지 않아요. 서비스 운영상 작성자 확인 기록은 별도로 관리돼요.</Text></View>
-        <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>어느 지역의 글을 볼까요?</Text>
+        <CommunityScopeSelector
+          scope={scope} onScopeChange={onChangeScope}
+          exchangeInfo={exchangeInfo} semester={semester} onSemesterChange={onChangeSemester}
+        />
+        <FavoriteBoardSection favorites={favorites} onToggle={onToggleFavorite} onOpen={onChangeCategory} />
+        <View style={styles.boardBrowseHeader}>
+          <Text style={styles.communityBrowseTitle}>게시판 둘러보기</Text>
+          {onRefresh && <TouchableOpacity accessibilityRole="button" onPress={onRefresh}><Text style={styles.moreText}>↻ 새로고침</Text></TouchableOpacity>}
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {areas.map(([key, label]) => <TouchableOpacity key={key} onPress={() => onChangeScope(key)} style={[styles.filterChip, scope === key && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, scope === key && styles.filterChipTextActive]}>{label}</Text>
-          </TouchableOpacity>)}
+          {['전체', ...COMMUNITY_BOARDS.map((board) => board.key)].map((item) => (
+            <TouchableOpacity key={item} accessibilityRole="button"
+              accessibilityState={{ selected: category === item }}
+              onPress={() => onChangeCategory(item)}
+              style={[styles.filterChip, category === item && styles.filterChipActive]}>
+              <Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>
+                {item === '전체' ? '전체' : boardTitle(item)}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
-        {!exchangeInfo && <Text style={styles.prototypeNote}>파견 대학을 등록하면 같은 대학·도시·국가의 글만 골라 볼 수 있어요.</Text>}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {categories.map((item) => <TouchableOpacity key={item} onPress={() => setCategory(item)} style={[styles.filterChip, category === item && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text>
-          </TouchableOpacity>)}
-        </ScrollView>
-        {loading && <ActivityIndicator style={{ marginTop: 20 }} color={COLORS.accent} />}
-        {!loading && visible.length === 0 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>아직 이 조건에 맞는 글이 없어요</Text><Text style={styles.noticeBody}>첫 질문을 작성하거나 검색 범위를 넓혀 보세요.</Text></View>}
-        {visible.map((post) => <TouchableOpacity key={post.id} style={styles.communityPost} onPress={() => onOpen(post.id)}>
-          <View style={styles.inlineRow}><Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postTime}>{post.time}</Text></View>
-          <Text style={styles.postTitle}>{post.title}</Text><Text numberOfLines={2} style={styles.postBody}>{post.body}</Text>
-          <Text style={styles.postMeta}>익명 · {post.meta} · 댓글 {post.comments.length}</Text>
-        </TouchableOpacity>)}
+        <View style={styles.boardBrowseHeader}>
+          <View>
+            <Text style={styles.communityBrowseTitle}>{category === '전체' ? '전체 게시글' : boardTitle(category)}</Text>
+            <Text style={styles.communityBrowseSub}>{ordered.length}개의 글 · {semester}</Text>
+          </View>
+          <View style={styles.communitySortActions}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setSortBy('new')}>
+              <Text style={[styles.communitySortText, sortBy === 'new' && styles.communitySortTextActive]}>최신순</Text>
+            </TouchableOpacity>
+            <Text style={styles.communitySortText}> · </Text>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setSortBy('replies')}>
+              <Text style={[styles.communitySortText, sortBy === 'replies' && styles.communitySortTextActive]}>댓글순</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {loading && <ActivityIndicator style={{ marginTop: 18 }} color={COLORS.accent} />}
+        {!loading && ordered.length === 0 && (
+          <View style={styles.noticeBox}>
+            <Text style={styles.noticeTitle}>이 조건에 맞는 게시글이 없어요</Text>
+            <Text style={styles.noticeBody}>지역이나 학기를 넓혀 보거나 첫 질문을 작성해 보세요.</Text>
+          </View>
+        )}
+        {ordered.length > 0 && (
+          <View style={styles.communityFeedCard}>
+            {ordered.map((post, i) => (
+              <CompactCommunityPost key={post.id} post={post} last={i === ordered.length - 1} onOpen={onOpen} />
+            ))}
+          </View>
+        )}
+        <Text style={styles.prototypeNote}>익명 게시글에는 다른 사람의 프로필이 표시되지 않아요. 신고 기록은 운영 검토용으로 따로 저장돼요.</Text>
       </ScrollView>
       <BottomNav active="community" onHome={onHome} onFind={onFind} onCommunity={() => {}} onMy={onMy} />
     </Screen>
   );
 }
 
-function WritePostScreen({ onCancel, onSubmit }) {
-  const [category, setCategory] = useState('질문');
+function WritePostScreen({ onCancel, onSubmit, initialCategory = '질문' }) {
+  const [category, setCategory] = useState(COMMUNITY_BOARDS.some((item) => item.key === initialCategory) ? initialCategory : '질문');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   return (
@@ -1077,11 +1171,17 @@ function MyScreen({ profile, exchangeInfo, exchangeInterest, verification, onVer
   );
 }
 
-function HomeScreen({ exchangeInfo, exchangeInterest, listings, onMarket, onOpenChat, profile, posts, preview, onRegister, onFind, onCommunity, onCheckin, onChecklist, onMy }) {
+function HomeScreen({ exchangeInfo, exchangeInterest, listings, onMarket, onOpenChat, profile, posts, preview, onRegister, onFind, onCommunity, onFavoriteBoard, onToggleFavorite, favorites, onOpenPost, communitySemester, onCheckin, onChecklist, onMy }) {
   return (
     <Screen><ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><View><Text style={styles.miniBrand}>교환점.</Text><Text style={styles.hello}>{profile.nickname}님, 안녕하세요 👋</Text></View></View>
       <MyExchangeCard exchangeInfo={exchangeInfo} exchangeInterest={exchangeInterest} onRegister={onRegister} />
+      <Text style={styles.communityHomeTerm}>교환학생 게시판 · {communitySemester}</Text>
+      <HomeCommunitySection
+        favorites={favorites} onToggleFavorite={onToggleFavorite}
+        onOpenBoard={onFavoriteBoard} posts={posts}
+        onOpenPost={onOpenPost} onAllPosts={onCommunity} preview={preview}
+      />
       <TouchableOpacity activeOpacity={0.85} style={styles.marketBlock} onPress={onMarket}>
         <View style={styles.sectionRow}><Text style={styles.marketBlockTitle}>중고거래</Text><Text style={styles.moreTextOnBlock}>전체보기 ›</Text></View>
         <Text style={styles.marketBlockBody}>그 나라에서 필요한 물건, 교환학생끼리 사고팔아요.</Text>
@@ -1096,8 +1196,7 @@ function HomeScreen({ exchangeInfo, exchangeInterest, listings, onMarket, onOpen
         <QuickCard icon="✓" title="준비 체크" subtitle="비자 · 서류 · 출국 준비" onPress={onChecklist} />
         <QuickCard wide icon="#" title="오픈채팅" subtitle="나라 · 도시 · 관심사별 채팅방 둘러보기" onPress={onOpenChat} />
       </View>
-      <View style={styles.sectionRow}><Text style={styles.sectionTitle}>지금 많이 찾는 이야기</Text><TouchableOpacity onPress={onCommunity}><Text style={styles.moreText}>전체보기</Text></TouchableOpacity></View>
-      <TouchableOpacity style={styles.postCard} onPress={onCommunity}><Text style={styles.postBadge}>{preview ? "미리보기 · " : ""}익명 커뮤니티</Text><Text style={styles.postTitle}>{posts?.[0]?.title || "아직 게시글이 없어요. 첫 질문을 작성해 보세요."}</Text><Text style={styles.postMeta}>{posts?.[0]?.meta || "커뮤니티에 글을 남겨봐요"}</Text></TouchableOpacity>
+
     </ScrollView><BottomNav active="home" onHome={() => {}} onFind={onFind} onCommunity={onCommunity} onMy={onMy} /></Screen>
   );
 }
@@ -1762,6 +1861,14 @@ const styles = StyleSheet.create({
   profileActionText: { color: COLORS.accent, fontSize: 15, fontWeight: '800' },
   profileMessageButton: { flex: 1, height: 52, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accent, borderWidth: 1, borderColor: COLORS.accent, borderRadius: 15 },
   profileMessageButtonText: { color: COLORS.onAccent, fontSize: 15, fontWeight: '800' },
+  communityHomeTerm: { color: COLORS.accent, fontSize: 12, fontWeight: '800', marginTop: 4, marginBottom: 16 },
+  boardBrowseHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginBottom: 14, gap: 10 },
+  communityBrowseTitle: { color: COLORS.text, fontSize: 17, fontWeight: '800' },
+  communityBrowseSub: { color: COLORS.subtext, fontSize: 11, marginTop: 4 },
+  communitySortActions: { flexDirection: 'row', alignItems: 'center' },
+  communitySortText: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  communitySortTextActive: { color: COLORS.accent },
+  communityFeedCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, paddingHorizontal: 14, marginBottom: 18, overflow: 'hidden' },
   communityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12 },
   pageTitle: { color: COLORS.text, fontSize: 25, fontWeight: '800' },
   writeButton: { backgroundColor: COLORS.accent, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12 },
