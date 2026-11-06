@@ -4,9 +4,8 @@ import {
   ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { supabase, friendlyError } from '../lib/cloud';
+import { COLORS } from '../theme';
 
-const GREEN = '#486A55';
-const BACKGROUND = '#F7F5EE';
 
 export function AuthScreen() {
   const [registering, setRegistering] = useState(false);
@@ -54,22 +53,22 @@ export function AuthScreen() {
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.brand}>교환점</Text>
+          <Text style={styles.brand}>교환점.</Text>
           <Text style={styles.headline}>{registering ? '새 계정 만들기' : '로그인'}</Text>
           <Text style={styles.helper}>친구와 커뮤니티 글, 파견 정보, 체크인을 실제로 공유해요.</Text>
           <Text style={styles.fieldLabel}>이메일</Text>
           <TextInput style={styles.input} value={email} onChangeText={setEmail}
             autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
-            textContentType="emailAddress" placeholder="이메일 주소" />
+            textContentType="emailAddress" placeholder="이메일 주소" placeholderTextColor={COLORS.muted} />
           <Text style={styles.fieldLabel}>비밀번호</Text>
           <TextInput style={styles.input} value={password} onChangeText={setPassword}
             secureTextEntry textContentType={registering ? 'newPassword' : 'password'}
-            placeholder="8자 이상" />
+            placeholder="8자 이상" placeholderTextColor={COLORS.muted} />
           {!!errorText && <Text style={styles.error}>{errorText}</Text>}
           {!!noticeText && <Text style={styles.notice}>{noticeText}</Text>}
           <TouchableOpacity style={[styles.button, busy && { opacity: 0.6 }]}
             disabled={busy} onPress={submit}>
-            {busy ? <ActivityIndicator color="white" /> :
+            {busy ? <ActivityIndicator color={COLORS.onAccent} /> :
               <Text style={styles.buttonLabel}>{registering ? '회원가입' : '로그인'}</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { setErrorText(''); setNoticeText(''); setRegistering((v) => !v); }} style={styles.toggle}>
@@ -88,7 +87,7 @@ export function SetupScreen({ onPreview }) {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={[styles.content, { justifyContent: 'center', flex: 1 }]}>
-        <Text style={styles.brand}>교환점</Text>
+        <Text style={styles.brand}>교환점.</Text>
         <Text style={styles.headline}>데이터베이스 연결 전이에요</Text>
         <Text style={styles.helper}>
           실제 회원가입과 데이터 공유를 사용하려면 Supabase 프로젝트를 만들고 README 안내대로 .env와 SQL을 설정해야 해요.
@@ -103,20 +102,20 @@ export function SetupScreen({ onPreview }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BACKGROUND },
+  screen: { flex: 1, backgroundColor: COLORS.background },
   content: { paddingHorizontal: 24, paddingVertical: 36, flexGrow: 1 },
-  brand: { color: GREEN, fontSize: 28, fontWeight: '900', marginBottom: 42 },
-  headline: { color: '#28312B', fontSize: 26, fontWeight: '800', marginBottom: 14 },
-  helper: { fontSize: 15, lineHeight: 23, color: '#65756A', marginBottom: 28 },
-  fieldLabel: { marginBottom: 8, fontSize: 14, color: '#28312B', fontWeight: '700' },
-  input: { backgroundColor: 'white', borderWidth: 1, borderColor: '#E8E4DA', borderRadius: 14,
-    height: 52, paddingHorizontal: 14, marginBottom: 18, fontSize: 15 },
-  button: { height: 54, backgroundColor: GREEN, borderRadius: 16, alignItems: 'center',
-    justifyContent: 'center', marginTop: 8 },
-  buttonLabel: { fontSize: 16, fontWeight: '800', color: 'white' },
+  brand: { color: COLORS.accent, fontSize: 28, fontWeight: '900', marginBottom: 42 },
+  headline: { color: COLORS.text, fontSize: 26, fontWeight: '800', marginBottom: 14 },
+  helper: { fontSize: 15, lineHeight: 23, color: COLORS.subtext, marginBottom: 28 },
+  fieldLabel: { marginBottom: 8, fontSize: 14, color: COLORS.text, fontWeight: '700' },
+  input: { backgroundColor: COLORS.input, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14,
+    height: 52, paddingHorizontal: 14, marginBottom: 18, fontSize: 15, color: COLORS.text },
+  button: { height: 54, backgroundColor: COLORS.accent, borderRadius: 16, alignItems: 'center',
+    justifyContent: 'center', marginTop: 20, marginBottom: 12 },
+  buttonLabel: { fontSize: 16, fontWeight: '800', color: COLORS.onAccent },
   toggle: { alignItems: 'center', padding: 18 },
-  toggleLabel: { color: GREEN, fontWeight: '700' },
-  error: { color: '#A34A4A', fontSize: 13, marginBottom: 12, lineHeight: 19 },
-  notice: { color: GREEN, fontSize: 13, lineHeight: 20, marginBottom: 12 },
-  disclaimer: { marginTop: 18, lineHeight: 20, color: '#7A837D', fontSize: 12 },
+  toggleLabel: { color: COLORS.accent, fontWeight: '700' },
+  error: { color: COLORS.error, backgroundColor: COLORS.errorSurface, borderRadius: 12, padding: 11, fontSize: 13, marginBottom: 12, lineHeight: 19 },
+  notice: { color: COLORS.accent, backgroundColor: COLORS.surface, borderRadius: 12, padding: 11, fontSize: 13, lineHeight: 20, marginBottom: 12 },
+  disclaimer: { marginTop: 18, lineHeight: 20, color: COLORS.subtext, fontSize: 12 },
 });

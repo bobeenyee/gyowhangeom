@@ -31,14 +31,22 @@ export function friendlyError(error) {
   if (/Invalid login credentials/i.test(message)) return '이메일 또는 비밀번호가 올바르지 않아요.';
   if (/Email not confirmed/i.test(message)) return '가입 확인 메일을 먼저 확인해 주세요.';
   if (/Email address not authorized|email_address_not_authorized/i.test(message)) return 'Supabase 기본 이메일 서버는 해당 프로젝트 팀원에게만 메일을 보낼 수 있어요. 팀 초대 또는 SMTP 설정이 필요합니다.';
-  if (/relation .* does not exist|Could not find the table|Could not find the function/i.test(message)) {
+  if (/UNIVERSITY_NOT_VERIFIED/.test(message)) return '대학 인증이 승인된 뒤에 이용할 수 있어요.';
+  if (/relation .* does not exist|Could not find the table|Could not find the function|schema cache|Bucket not found/i.test(message)) {
     return '데이터베이스 설정이 아직 완료되지 않았어요. README의 SQL 설치 단계를 확인해 주세요.';
   }
   return message;
 }
 
+// Tables and columns added by the later SQL files: login keeps working on a database that has not applied them yet.
+function unpackOptional(result) {
+  if (['42P01', 'PGRST205', '42703'].includes(result.error?.code)) return null;
+  return unpack(result);
+}
+
 export function toProfile(row) {
   return row ? {
+    onboardingDone: row.onboarding_done !== false,
     nickname: row.nickname || '교환학생',
     homeUniversity: row.home_university || '',
     showHomeUniversity: Boolean(row.show_home_university),
@@ -59,14 +67,31 @@ export function toExchange(row) {
     latitude: row.latitude == null ? null : Number(row.latitude),
     longitude: row.longitude == null ? null : Number(row.longitude),
     semester: row.year + '년 ' + row.term,
+    startDate: row.start_date || null,
+    endDate: row.end_date || null,
+    courses: row.courses || [],
+    courseStatus: row.course_status || 'planned',
+  } : null;
+}
+
+export function toInterest(row) {
+  return row ? {
+    region: row.region || '',
+    universityId: row.university_id || '',
+    universityName: row.university_name || '',
+    country: row.country || '',
+    countryCode: row.country_code || '',
+    city: row.city || '',
   } : null;
 }
 
 export async function loadAccount(userId) {
-  const [profileResult, exchangeResult, checklistResult] = await Promise.all([
+  const [profileResult, exchangeResult, checklistResult, interestResult, verificationResult] = await Promise.all([
     supabase.from('people_profiles').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('exchange_assignments').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('checklist_items').select('item_key,done').eq('user_id', userId),
+    supabase.from('exchange_interests').select('*').eq('user_id', userId).maybeSingle(),
+    supabase.from('university_verifications').select('status,email').eq('user_id', userId).maybeSingle(),
   ]);
   let rawProfile = unpack(profileResult);
   if (!rawProfile) {
@@ -79,10 +104,13 @@ export async function loadAccount(userId) {
   }
   const rawExchange = unpack(exchangeResult);
   const rawChecks = unpack(checklistResult);
+  const rawVerification = unpackOptional(verificationResult);
   return {
     profile: toProfile(rawProfile),
     exchangeInfo: toExchange(rawExchange),
-    checks: Object.fromEntries((rawChecks || []).map(({ item_key, done }) => [item_key, done])),
+    exchangeInterest: rawExchange ? null : toInterest(unpackOptional(interestResult)),
+    verification: rawVerification ? { status: rawVerification.status, email: rawVerification.email } : null,
+    checks:Object.fromEntries((rawChecks || []).map(({ item_key, done }) => [item_key, done])),
   };
 }
 
@@ -113,7 +141,144 @@ export async function saveExchange(userId, info) {
     longitude: info.longitude,
     year: Number(match[1]),
     term: match[2],
+    start_date: info.startDate || null,
+    end_date: info.endDate || null,
+    courses: (info.courses || []).slice(0, 12).map((x) => x.slice(0, 60)),
+    course_status: info.courseStatus || 'planned',
   }, { onConflict: 'user_id' }));
+  unpackOptional(await supabase.from('exchange_interests').delete().eq('user_id', userId));
+}
+
+export async function saveInterest(userId, interest) {
+  unpack(await supabase.from('exchange_interests').upsert({
+    user_id: userId,
+    region: interest.region.trim().slice(0, 120),
+    university_id: interest.universityId || '',
+    university_name: interest.universityName || '',
+    country: interest.country || '',
+    country_code: interest.countryCode || '',
+    city: interest.city || '',
+  }, { onConflict: 'user_id' }));
+  unpack(await supabase.from('exchange_assignments').delete().eq('user_id', userId));
+}
+
+export async function completeOnboarding(userId) {
+  unpack(await supabase.from('people_profiles').update({ onboarding_done: true }).eq('user_id', userId));
+}
+
+// Same rule as private.is_university_email in supabase/university_email.sql, which is what actually decides.
+export function isUniversityEmail(email) {
+  const clean = email.trim().toLowerCase();
+  return /^[a-z0-9._%+-]+@([a-z0-9-]+\.)+(ac\.[a-z]{2}|edu|edu\.[a-z]{2})$/.test(clean) || clean.endsWith('@ewhain.net');
+}
+
+export async function requestUniversityCode(email) {
+  const { error } = await supabase.functions.invoke('send-university-code', { body: { email: email.trim().toLowerCase() } });
+  if (!error) return;
+  const body = await error.context?.json?.().catch(() => null);
+  throw new Error(body?.error || '인증 메일 서버가 아직 준비되지 않았어요. README의 이메일 인증 설정을 확인해 주세요.');
+}
+
+export async function confirmUniversityCode(code) {
+  return unpack(await supabase.rpc('confirm_university_email_code', { p_code: code }));
+}
+
+function toListing(row) {
+  return {
+    id: row.id,
+    sellerId: row.seller_id,
+    sellerNickname: row.seller_nickname,
+    title: row.title,
+    description: row.description,
+    priceText: row.price_text,
+    category: row.category,
+    country: row.country,
+    countryCode: row.country_code,
+    city: row.city,
+    status: row.status,
+    time: new Date(row.created_at).toLocaleDateString('ko-KR'),
+  };
+}
+
+export async function loadListings() {
+  const data = unpack(await supabase.from('market_listings').select('*').order('created_at', { ascending: false }).limit(100));
+  return (data || []).map(toListing);
+}
+
+export async function createListing(listing) {
+  return unpack(await supabase.rpc('create_market_listing', {
+    p_title: listing.title,
+    p_description: listing.description,
+    p_price_text: listing.priceText,
+    p_category: listing.category,
+  }));
+}
+
+export async function setListingStatus(listingId, status) {
+  unpack(await supabase.from('market_listings').update({ status }).eq('id', listingId));
+}
+
+export async function startChat(listingId) {
+  return unpack(await supabase.rpc('start_market_chat', { p_listing_id: listingId }));
+}
+
+export async function loadChats(userId) {
+  const data = unpack(await supabase.from('market_conversations')
+    .select('id,listing_id,buyer_id,seller_id,buyer_nickname,market_listings(title,seller_nickname)')
+    .order('created_at', { ascending: false }));
+  return (data || []).map((row) => ({
+    id: row.id,
+    listingId: row.listing_id,
+    listingTitle: row.market_listings?.title || '삭제된 게시글',
+    otherNickname: row.buyer_id === userId ? row.market_listings?.seller_nickname || '판매자' : row.buyer_nickname,
+    role: row.buyer_id === userId ? '구매 문의' : '내 물건 문의',
+  }));
+}
+
+export async function loadMessages(conversationId) {
+  const data = unpack(await supabase.from('market_messages').select('id,sender_id,body,created_at')
+    .eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(500));
+  return (data || []).map((row) => ({ id: row.id, senderId: row.sender_id, body: row.body }));
+}
+
+export async function sendMessage(conversationId, body) {
+  unpack(await supabase.rpc('send_market_message', { p_conversation_id: conversationId, p_body: body }));
+}
+
+export async function loadOpenChatRooms() {
+  const data = unpack(await supabase.rpc('list_open_chat_rooms'));
+  return (data || []).map((row) => ({
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    country: row.country,
+    countryCode: row.country_code,
+    city: row.city,
+    memberCount: Number(row.member_count),
+    isMember: row.is_member,
+  }));
+}
+
+export async function createOpenChatRoom(room) {
+  return unpack(await supabase.rpc('create_open_chat_room', { p_title: room.title, p_description: room.description }));
+}
+
+export async function joinOpenChatRoom(roomId) {
+  unpack(await supabase.rpc('join_open_chat_room', { p_room_id: roomId }));
+}
+
+export async function leaveOpenChatRoom(roomId) {
+  unpack(await supabase.rpc('leave_open_chat_room', { p_room_id: roomId }));
+}
+
+export async function loadOpenChatMessages(roomId) {
+  const data = unpack(await supabase.from('open_chat_messages').select('id,sender_id,sender_nickname,body')
+    .eq('room_id', roomId).order('created_at', { ascending: true }).limit(500));
+  return (data || []).map((row) => ({ id: row.id, senderId: row.sender_id, senderNickname: row.sender_nickname, body: row.body }));
+}
+
+export async function sendOpenChatMessage(roomId, body) {
+  unpack(await supabase.rpc('send_open_chat_message', { p_room_id: roomId, p_body: body }));
 }
 
 export async function loadPeople(info) {

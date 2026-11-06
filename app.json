@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "교환점",
+    "name": "교환점.",
     "slug": "gyohwanjeom",
     "version": "0.1.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bobeenyee.gyohwanjeom"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F7F5EE"
+        "backgroundColor": "#000000"
       }
     },
     "owner": "bobeenyees-team",
@@ -19,6 +19,7 @@
     "web": {
       "bundler": "metro",
       "output": "single"
-    }
+    },
+    "backgroundColor": "#000000"
   }
 }
