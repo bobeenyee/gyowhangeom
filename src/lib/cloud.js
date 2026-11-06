@@ -281,6 +281,37 @@ export async function sendOpenChatMessage(roomId, body) {
   unpack(await supabase.rpc('send_open_chat_message', { p_room_id: roomId, p_body: body }));
 }
 
+// Moderation actions are limited to the authenticated account by database RLS.
+export async function reportOpenChatMessage(messageId, reason) {
+  unpack(await supabase.rpc('report_open_chat_message', {
+    p_message_id: messageId,
+    p_reason: reason,
+  }));
+}
+
+export async function blockOpenChatUser(blockerId, blockedId, nickname = '') {
+  const result = await supabase.from('open_chat_user_blocks').insert({
+    blocker_id: blockerId,
+    blocked_id: blockedId,
+    blocked_nickname: String(nickname).slice(0, 64),
+  });
+  if (result.error && result.error.code !== '23505') throw result.error;
+}
+
+export async function loadBlockedOpenChatUsers(blockerId) {
+  const data = unpack(await supabase.from('open_chat_user_blocks')
+    .select('blocked_id,blocked_nickname,created_at')
+    .eq('blocker_id', blockerId).order('created_at', { ascending: false }));
+  return (data || []).map((row) => ({
+    blockedId: row.blocked_id, nickname: row.blocked_nickname,
+  }));
+}
+
+export async function unblockOpenChatUser(blockerId, blockedId) {
+  unpack(await supabase.from('open_chat_user_blocks').delete()
+    .eq('blocker_id', blockerId).eq('blocked_id', blockedId));
+}
+
 export async function loadPeople(info) {
   if (!info?.countryCode) return [];
   const match = info.semester.match(/^(\d{4})년\s(.+)$/);

@@ -13,9 +13,10 @@ import {
   View,
 } from 'react-native';
 import { AuthScreen, SetupScreen } from './src/components/AuthScreen';
+import { ChatSafetyPanel } from './src/components/ChatSafetyPanel';
 import { COLORS } from './src/theme';
 import { searchUniversities } from './src/lib/universitySearch';
-import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveInterest as cloudSaveInterest, completeOnboarding as cloudCompleteOnboarding, isUniversityEmail, requestUniversityCode, confirmUniversityCode, loadListings, createListing as cloudCreateListing, setListingStatus as cloudSetListingStatus, startChat as cloudStartChat, loadChats, loadMessages as cloudLoadMessages, sendMessage as cloudSendMessage, loadOpenChatRooms, createOpenChatRoom, joinOpenChatRoom, leaveOpenChatRoom, loadOpenChatMessages, sendOpenChatMessage, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
+import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveInterest as cloudSaveInterest, completeOnboarding as cloudCompleteOnboarding, isUniversityEmail, requestUniversityCode, confirmUniversityCode, loadListings, createListing as cloudCreateListing, setListingStatus as cloudSetListingStatus, startChat as cloudStartChat, loadChats, loadMessages as cloudLoadMessages, sendMessage as cloudSendMessage, loadOpenChatRooms, createOpenChatRoom, joinOpenChatRoom, leaveOpenChatRoom, loadOpenChatMessages, sendOpenChatMessage, reportOpenChatMessage, blockOpenChatUser, loadBlockedOpenChatUsers, unblockOpenChatUser, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
 
 
 const YEARS = Array.from({ length: 25 }, (_, index) => 2026 + index);
@@ -447,6 +448,26 @@ export default function App() {
     else setPreviewMessages((prev) => ({ ...prev, [roomId]: [...(prev[roomId] || []), { id: String(Date.now()), senderId: 'me', senderNickname: profile.nickname, body }] }));
   }
 
+  async function reportRoomMessage(message, reason) {
+    if (!supabase) return;
+    await reportOpenChatMessage(message.id, reason);
+  }
+
+  async function blockRoomUser(message) {
+    if (!supabase || !session?.user?.id) return;
+    await blockOpenChatUser(session.user.id, message.senderId, message.senderNickname);
+  }
+
+  async function loadRoomBlockList() {
+    if (!supabase || !session?.user?.id) return [];
+    return loadBlockedOpenChatUsers(session.user.id);
+  }
+
+  async function unblockRoomUser(user) {
+    if (!supabase || !session?.user?.id) return;
+    await unblockOpenChatUser(session.user.id, user.blockedId);
+  }
+
   async function fetchMessages(conversationId) {
     return supabase ? cloudLoadMessages(conversationId) : previewMessages[conversationId] || [];
   }
@@ -586,7 +607,7 @@ export default function App() {
     return <OpenChatIntroScreen room={selectedRoom} verified={isVerified} onVerify={() => askVerify('openChatIntro')} onBack={() => setScreen('openChat')} onEnter={enterRoom} />;
   }
   if (screen === 'openChatRoom' && selectedRoom) {
-    return <ChatScreen chat={{ id: selectedRoom.id, otherNickname: selectedRoom.title, listingTitle: roomPlace(selectedRoom) }} userId={session?.user?.id || 'me'} showSender backLabel="‹ 목록" onLoad={fetchRoomMessages} onSend={postRoomMessage} onBack={() => setScreen('openChat')} onLeave={() => leaveRoom(selectedRoom)} />;
+    return <ChatScreen chat={{ id: selectedRoom.id, otherNickname: selectedRoom.title, listingTitle: roomPlace(selectedRoom) }} userId={session?.user?.id || 'me'} showSender backLabel="‹ 목록" onLoad={fetchRoomMessages} onSend={postRoomMessage} onBack={() => setScreen('openChat')} onLeave={() => leaveRoom(selectedRoom)} onReport={supabase ? reportRoomMessage : undefined} onBlock={supabase ? blockRoomUser : undefined} onLoadBlocked={supabase ? loadRoomBlockList : undefined} onUnblock={supabase ? unblockRoomUser : undefined} />;
   }
   if (screen === 'market') {
     return <MarketScreen listings={listings} loading={marketLoading} error={marketError} preview={!isCloudConfigured} place={exchangeInfo || exchangeInterest} onRefresh={isCloudConfigured ? refreshMarket : null} onBack={goHome} onWrite={() => setScreen('writeListing')} onChats={() => setScreen('chats')} onOpen={(id) => { setSelectedListingId(id); setScreen('listing'); }} />;
@@ -1382,11 +1403,15 @@ function ChatListScreen({ chats, onLoad, onBack, onOpen }) {
   );
 }
 
-function ChatScreen({ chat, userId, onLoad, onSend, onBack, onLeave, showSender = false, backLabel = '‹ 대화' }) {
+function ChatScreen({ chat, userId, onLoad, onSend, onBack, onLeave, onReport, onBlock, onLoadBlocked, onUnblock, showSender = false, backLabel = '‹ 대화' }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
+  const [moderationTarget, setModerationTarget] = useState(null);
+  const [showBlockList, setShowBlockList] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [moderationNotice, setModerationNotice] = useState('');
   const scrollRef = useRef(null);
   const onLoadRef = useRef(onLoad);
   onLoadRef.current = onLoad;
@@ -1397,6 +1422,9 @@ function ChatScreen({ chat, userId, onLoad, onSend, onBack, onLeave, showSender 
   }
 
   useEffect(() => {
+    setModerationTarget(null);
+    setShowBlockList(false);
+    setModerationNotice('');
     refresh();
     const timer = setInterval(refresh, 4000);
     return () => clearInterval(timer);
@@ -1411,19 +1439,59 @@ function ChatScreen({ chat, userId, onLoad, onSend, onBack, onLeave, showSender 
     finally { setSending(false); }
   }
 
+  async function openBlockedUsers() {
+    setModerationTarget(null);
+    setShowBlockList(true);
+    try {
+      setBlockedUsers(await onLoadBlocked());
+    } catch (e) {
+      setShowBlockList(false);
+      setError(friendlyError(e));
+    }
+  }
+
+  async function reportMessage(message, reason) {
+    await onReport(message, reason);
+    setModerationNotice('신고가 접수됐어요.');
+  }
+
+  async function blockMessage(message) {
+    await onBlock(message);
+    await refresh();
+    setModerationNotice('사용자를 차단했어요. 차단 목록에서 해제할 수 있어요.');
+  }
+
+  async function unblockMessage(user) {
+    await onUnblock(user);
+    setBlockedUsers(await onLoadBlocked());
+    await refresh();
+    setModerationNotice('차단을 해제했어요.');
+  }
+
   return (
     <Screen><TopHeader title={chat.otherNickname} onBack={onBack} backLabel={backLabel} />
       {!!chat.listingTitle && <Text style={styles.chatListing} numberOfLines={1}>{chat.listingTitle}</Text>}
       {onLeave && <TouchableOpacity style={styles.chatLeave} onPress={() => onLeave().catch((e) => setError(friendlyError(e)))}><Text style={styles.chatLeaveText}>방 나가기</Text></TouchableOpacity>}
+      {onLoadBlocked && <TouchableOpacity style={styles.chatLeave} onPress={openBlockedUsers}><Text style={styles.chatLeaveText}>차단 목록 관리</Text></TouchableOpacity>}
+      {!!moderationNotice && <Text style={[styles.chatLeaveText, { marginHorizontal: 20, marginVertical: 6 }]}>{moderationNotice}</Text>}}
       <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={styles.chatContent} onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })} keyboardShouldPersistTaps="handled">
         {messages.length === 0 && <Text style={styles.emptyBody}>첫 메시지를 보내 보세요.</Text>}
-        {messages.map((message) => <View key={message.id} style={[styles.chatBubble, message.senderId === userId && styles.chatBubbleMine]}>{showSender && message.senderId !== userId && <Text style={styles.chatSender}>{message.senderNickname}</Text>}<Text style={[styles.chatText, message.senderId === userId && styles.chatTextMine]}>{message.body}</Text></View>)}
+        {messages.map((message) => <View key={message.id} style={[styles.chatBubble, message.senderId === userId && styles.chatBubbleMine]}>{showSender && message.senderId !== userId && <Text style={styles.chatSender}>{message.senderNickname}</Text>}<Text style={[styles.chatText, message.senderId === userId && styles.chatTextMine]}>{message.body}</Text>{showSender && onReport && message.senderId !== userId && <TouchableOpacity accessibilityRole="button" accessibilityLabel="이 메시지 신고 또는 사용자 차단" style={styles.chatSafetyAction} onPress={() => { setModerationNotice(''); setShowBlockList(false); setModerationTarget(message); }}><Text style={styles.chatSafetyActionText}>신고 · 차단</Text></TouchableOpacity>}</View>)}
       </ScrollView>
       {!!error && <Text style={[styles.inlineError, { marginHorizontal: 20 }]}>{error}</Text>}
       <View style={styles.chatInputRow}>
         <TextInput style={styles.commentInput} value={text} maxLength={1000} onChangeText={setText} placeholder="메시지 입력" placeholderTextColor="#A1A7A2" onSubmitEditing={send} />
         <TouchableOpacity disabled={sending || !text.trim()} style={[styles.commentSend, (sending || !text.trim()) && styles.saveButtonDisabled]} onPress={send}><Text style={styles.commentSendText}>전송</Text></TouchableOpacity>
       </View>
+      {onReport && <ChatSafetyPanel
+        mode={showBlockList ? 'blocks' : moderationTarget ? 'message' : null}
+        message={moderationTarget}
+        blockedUsers={blockedUsers}
+        onClose={() => { setShowBlockList(false); setModerationTarget(null); }}
+        onReport={reportMessage}
+        onBlock={blockMessage}
+        onUnblock={unblockMessage}
+      />}
     </Screen>
   );
 }
@@ -1758,6 +1826,8 @@ const styles = StyleSheet.create({
   quickCardWide: { width: '100%', minHeight: 0 },
   chatSender: { color: COLORS.accent, fontSize: 11, fontWeight: '800', marginBottom: 3 },
   chatLeave: { alignSelf: 'center', paddingHorizontal: 12, paddingBottom: 8 },
+  chatSafetyAction: { alignSelf: 'flex-start', marginTop: 6, paddingVertical: 4, paddingRight: 10 },
+  chatSafetyActionText: { color: COLORS.subtext, fontSize: 11, textDecorationLine: 'underline' },
   chatLeaveText: { color: COLORS.muted, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   stepHeader: { marginBottom: 8 },
   stepTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 24 },
