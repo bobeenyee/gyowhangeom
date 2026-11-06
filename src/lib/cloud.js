@@ -340,14 +340,18 @@ export async function loadPeople(info) {
   }));
 }
 
-export async function loadPosts(exchangeInfo = null, scope = 'all') {
+export async function loadPosts(exchangeInfo = null, scope = 'all', selectedSemester = undefined) {
   if (scope !== 'all' && !exchangeInfo) return [];
   let query = supabase.from('posts')
     .select('id,category,title,body,country_code,city,year,term,university_id,created_at,comments(id,body,created_at)');
-  if (scope !== 'all' && exchangeInfo) {
-    const match = exchangeInfo.semester?.match(/^(\d{4})년\s(.+)$/);
+  // The default is the user's registered cohort. Explicit "전체 학기" removes term filtering.
+  const semester = selectedSemester === undefined ? exchangeInfo?.semester : selectedSemester;
+  if (semester && semester !== '전체 학기') {
+    const match = semester.match(/^(\d{4})년\s(.+)$/);
     if (!match) return [];
     query = query.eq('year', Number(match[1])).eq('term', match[2]);
+  }
+  if (scope !== 'all' && exchangeInfo) {
     if (scope === 'school') query = query.eq('university_id', exchangeInfo.universityId);
     else if (scope === 'city') query = query.eq('country_code', exchangeInfo.countryCode).eq('city', exchangeInfo.city);
     else if (scope === 'country') query = query.eq('country_code', exchangeInfo.countryCode);
