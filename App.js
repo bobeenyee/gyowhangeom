@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
   Alert,
@@ -21,7 +22,7 @@ import {
 } from './src/components/ExchangeCommunitySections';
 import { COLORS } from './src/theme';
 import { searchUniversities } from './src/lib/universitySearch';
-import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveInterest as cloudSaveInterest, completeOnboarding as cloudCompleteOnboarding, isUniversityEmail, requestUniversityCode, confirmUniversityCode, loadListings, createListing as cloudCreateListing, setListingStatus as cloudSetListingStatus, startChat as cloudStartChat, loadChats, loadMessages as cloudLoadMessages, sendMessage as cloudSendMessage, loadOpenChatRooms, createOpenChatRoom, joinOpenChatRoom, leaveOpenChatRoom, loadOpenChatMessages, sendOpenChatMessage, reportOpenChatMessage, blockOpenChatUser, loadBlockedOpenChatUsers, unblockOpenChatUser, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
+import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveInterest as cloudSaveInterest, completeOnboarding as cloudCompleteOnboarding, isUniversityEmail, requestUniversityCode, confirmUniversityCode, loadListings, createListing as cloudCreateListing, updateListingHandoff as cloudUpdateListingHandoff, uploadListingPhoto as cloudUploadListingPhoto, setListingStatus as cloudSetListingStatus, startChat as cloudStartChat, loadChats, loadMessages as cloudLoadMessages, sendMessage as cloudSendMessage, loadOpenChatRooms, createOpenChatRoom, joinOpenChatRoom, leaveOpenChatRoom, loadOpenChatMessages, sendOpenChatMessage, reportOpenChatMessage, blockOpenChatUser, loadBlockedOpenChatUsers, unblockOpenChatUser, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
 
 
 const YEARS = Array.from({ length: 25 }, (_, index) => 2026 + index);
@@ -416,14 +417,33 @@ export default function App() {
   }
 
   async function submitListing(listing) {
+    let saveWarnings = [];
     if (supabase) {
-      await cloudCreateListing(listing);
+      // Keep the friend's existing verified-user creation RPC unchanged.
+      const listingId = await cloudCreateListing(listing);
+      if (listing.handoffDate || listing.handoffNote || listing.canHold) {
+        try { await cloudUpdateListingHandoff(listingId, listing); }
+        catch (error) { saveWarnings.push('인계 정보: ' + friendlyError(error)); }
+      }
+      if (listing.photo?.base64) {
+        try { await cloudUploadListingPhoto(listingId, session.user.id, listing.photo.base64); }
+        catch (error) { saveWarnings.push('사진: ' + friendlyError(error)); }
+      }
       await refreshMarket();
     } else {
       const place = exchangeInfo || exchangeInterest || {};
-      setListings((prev) => [{ ...listing, id: 'preview' + Date.now(), sellerId: 'me', sellerNickname: profile.nickname, country: place.country || '', countryCode: place.countryCode || '', city: place.city || '', status: 'selling', time: '방금' }, ...prev]);
+      setListings((prev) => [{
+        ...listing,
+        photoUrl: listing.photo?.uri || '',
+        id: 'preview' + Date.now(), sellerId: 'me', sellerNickname: profile.nickname,
+        country: place.country || '', countryCode: place.countryCode || '', city: place.city || '',
+        status: 'selling', time: '방금',
+      }, ...prev]);
     }
     setScreen('market');
+    if (saveWarnings.length) {
+      Alert.alert('물건 등록 완료', '물건은 등록됐지만 아래 정보는 저장되지 않았어요.\n' + saveWarnings.join('\n'));
+    }
   }
 
   async function changeListingStatus(listingId, status) {
@@ -1406,10 +1426,16 @@ function MarketScreen({ listings, loading, error, preview, place, onRefresh, onB
       {loading && <ActivityIndicator style={{ marginBottom: 16 }} color={COLORS.accent} />}
       {!error && !loading && visible.length === 0 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>아직 올라온 물건이 없어요</Text><Text style={styles.noticeBody}>다른 나라를 보거나 첫 물건을 올려 보세요.</Text></View>}
       {visible.map((item) => <TouchableOpacity key={item.id} style={styles.communityPost} onPress={() => onOpen(item.id)}>
-        <View style={styles.inlineRow}><Text style={styles.postCategory}>{item.category}</Text>{item.status !== 'selling' && <Text style={styles.reasonBadge}>{LISTING_STATUS[item.status]}</Text>}<Text style={styles.postTime}>{item.time}</Text></View>
-        <Text style={styles.postTitle}>{item.title}</Text>
-        <Text style={styles.listingPrice}>{item.priceText}</Text>
-        <Text style={styles.postMeta}>{[item.sellerNickname, item.city, item.country].filter(Boolean).join(' · ')}</Text>
+        <View style={styles.marketPhotoRow}>
+          {!!item.photoUrl && <Image style={styles.marketThumb} source={{ uri: item.photoUrl }} resizeMode="cover" />}
+          <View style={{ flex: 1 }}>
+            <View style={styles.inlineRow}><Text style={styles.postCategory}>{item.category}</Text>{item.status !== 'selling' && <Text style={styles.reasonBadge}>{LISTING_STATUS[item.status]}</Text>}<Text style={styles.postTime}>{item.time}</Text></View>
+            <Text style={styles.postTitle}>{item.title}</Text>
+            <Text style={styles.listingPrice}>{item.priceText}</Text>
+            {!!item.handoffDate && <Text style={styles.marketHandoffMeta}>인계 가능 {item.handoffDate}</Text>}
+            <Text style={styles.postMeta}>{[item.sellerNickname, item.city, item.country].filter(Boolean).join(' · ')}</Text>
+          </View>
+        </View>
       </TouchableOpacity>)}
     </ScrollView></Screen>
   );
@@ -1420,27 +1446,84 @@ function WriteListingScreen({ onCancel, onSubmit }) {
   const [priceText, setPriceText] = useState('');
   const [category, setCategory] = useState(MARKET_CATEGORIES[0]);
   const [description, setDescription] = useState('');
+  const [handoffDateText, setHandoffDateText] = useState('');
+  const [handoffNote, setHandoffNote] = useState('');
+  const [canHold, setCanHold] = useState(false);
+  const [photo, setPhoto] = useState(null);
+  const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const canSave = title.trim() && priceText.trim() && !saving;
+  const canSave = title.trim() && priceText.trim() && !saving && !picking;
+
+  async function choosePhoto() {
+    if (picking || saving) return;
+    setPicking(true);
+    setError('');
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3],
+        quality: 0.75, base64: true,
+      });
+      if (result.canceled) return;
+      const image = result.assets?.[0];
+      if (!image?.base64) throw new Error('이 사진은 첨부할 수 없어요. 다른 사진을 선택해 주세요.');
+      if ((image.fileSize && image.fileSize > 5 * 1024 * 1024)
+          || image.base64.length * 0.75 > 5 * 1024 * 1024) {
+        throw new Error('사진은 5MB 이하로 첨부해 주세요.');
+      }
+      setPhoto({ uri: image.uri, base64: image.base64 });
+    } catch (e) { setError(friendlyError(e)); }
+    finally { setPicking(false); }
+  }
 
   async function submit() {
+    const handoffDate = handoffDateText.trim() ? toIsoDate(handoffDateText) : '';
+    if (handoffDateText.trim() && !handoffDate) {
+      setError('인계 날짜는 2027-06-15처럼 입력해 주세요.'); return;
+    }
     setError('');
     setSaving(true);
-    try { await onSubmit({ title: title.trim(), priceText: priceText.trim(), category, description: description.trim() }); }
-    catch (e) { setError(friendlyError(e)); setSaving(false); }
+    try {
+      await onSubmit({
+        title: title.trim(), priceText: priceText.trim(), category,
+        description: description.trim(), handoffDate, handoffNote: handoffNote.trim(),
+        canHold, photo,
+      });
+    } catch (e) { setError(friendlyError(e)); setSaving(false); }
   }
 
   return (
-    <Screen><TopHeader title="물건 올리기" onBack={onCancel} backLabel="취소" /><ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-      <Field label="물건 이름"><TextInput style={styles.input} value={title} maxLength={80} onChangeText={setTitle} placeholder="예: 이케아 책상 스탠드" placeholderTextColor="#A1A7A2" /></Field>
-      <Field label="가격"><TextInput style={styles.input} value={priceText} maxLength={30} onChangeText={setPriceText} placeholder="예: 80 DKK, 20유로, 무료나눔" placeholderTextColor="#A1A7A2" /></Field>
-      <Field label="카테고리"><View style={styles.filterRowWrap}>{MARKET_CATEGORIES.map((item) => <ChoiceChip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}</View></Field>
-      <Field label="설명"><TextInput style={styles.textArea} multiline maxLength={2000} value={description} onChangeText={setDescription} placeholder="상태, 거래 장소, 가능한 시간을 적어 주세요." placeholderTextColor="#A1A7A2" /></Field>
-      <Text style={styles.helperText}>나라와 도시는 내 파견 정보에서 자동으로 표시돼요.</Text>
-      {!!error && <Text style={styles.inlineError}>{error}</Text>}
-      <PrimaryButton disabled={!canSave} label={saving ? '올리는 중...' : '올리기'} onPress={submit} />
-    </ScrollView></Screen>
+    <Screen><TopHeader title="물건 올리기" onBack={onCancel} backLabel="취소" />
+      <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
+        <Field label="물건 사진 (선택 · 1장)">
+          <TouchableOpacity accessibilityRole="button" disabled={saving || picking}
+            onPress={choosePhoto} style={styles.marketPhotoPicker}>
+            {photo ? <Image source={{ uri: photo.uri }} style={styles.marketPhotoPreview} resizeMode="cover" />
+              : <View style={styles.marketPhotoPlaceholder}><Text style={styles.marketPhotoPlus}>＋</Text><Text style={styles.marketPhotoPickerText}>사진 선택</Text></View>}
+          </TouchableOpacity>
+          {photo && <TouchableOpacity onPress={() => setPhoto(null)} disabled={saving}><Text style={styles.marketRemovePhoto}>사진 제거</Text></TouchableOpacity>}
+          <Text style={styles.helperText}>개인정보가 포함된 사진은 올리지 마세요. 거래 사진은 다른 사용자에게 공개돼요.</Text>
+        </Field>
+        <Field label="물건 이름"><TextInput style={styles.input} value={title} maxLength={80} onChangeText={setTitle} placeholder="예: 이케아 책상 스탠드" placeholderTextColor="#A1A7A2" /></Field>
+        <Field label="가격"><TextInput style={styles.input} value={priceText} maxLength={30} onChangeText={setPriceText} placeholder="예: 80 DKK, 20유로, 무료나눔" placeholderTextColor="#A1A7A2" /></Field>
+        <Field label="카테고리"><View style={styles.filterRowWrap}>{MARKET_CATEGORIES.map((item) => <ChoiceChip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}</View></Field>
+        <Field label="설명"><TextInput style={styles.textArea} multiline maxLength={2000} value={description} onChangeText={setDescription} placeholder="상태, 거래 장소, 가능한 시간을 적어 주세요." placeholderTextColor="#A1A7A2" /></Field>
+        <View style={styles.marketHandoffBlock}>
+          <Text style={styles.profileSectionTitle}>교환학생 인계 정보</Text>
+          <Text style={styles.helperText}>귀국하는 학생과 입국하는 학생이 미리 거래할 수 있도록 알려주세요.</Text>
+          <Field label="인계 가능일 (선택)"><TextInput style={styles.input} value={handoffDateText} maxLength={10} onChangeText={setHandoffDateText} placeholder="예: 2027-06-15" placeholderTextColor="#A1A7A2" /></Field>
+          <Field label="인계 장소·방법 (선택)"><TextInput style={styles.textAreaSmall} multiline value={handoffNote} maxLength={250} onChangeText={setHandoffNote} placeholder="예: 기숙사 정문에서 직접 전달" placeholderTextColor="#A1A7A2" /></Field>
+          <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: canHold }}
+            style={styles.marketHoldRow} onPress={() => setCanHold((v) => !v)}>
+            <Text style={styles.marketHoldCheck}>{canHold ? '☑' : '□'}</Text>
+            <View style={{ flex: 1 }}><Text style={styles.marketHoldTitle}>일정 조율·보관 가능</Text><Text style={styles.helperText}>인계 날짜를 협의할 수 있어요.</Text></View>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.helperText}>나라와 도시는 내 파견 정보에서 자동으로 표시돼요.</Text>
+        {!!error && <Text style={styles.inlineError}>{error}</Text>}
+        <PrimaryButton disabled={!canSave} label={saving ? '올리는 중...' : '물건 올리기'} onPress={submit} />
+      </ScrollView>
+    </Screen>
   );
 }
 
@@ -1461,10 +1544,17 @@ function ListingDetailScreen({ listing, isMine, verification, onBack, onChat, on
   return (
     <Screen><TopHeader title="중고거래" onBack={onBack} backLabel="‹ 목록" /><ScrollView contentContainerStyle={styles.postDetailContent}>
       <View style={styles.mySection}>
+        {!!listing.photoUrl && <Image source={{ uri: listing.photoUrl }} style={styles.marketDetailImage} resizeMode="cover" />}
         <View style={styles.inlineRow}><Text style={styles.postCategory}>{listing.category}</Text><Text style={styles.reasonBadge}>{LISTING_STATUS[listing.status]}</Text><Text style={styles.postTime}>{listing.time}</Text></View>
         <Text style={styles.listingDetailTitle}>{listing.title}</Text>
         <Text style={styles.listingDetailPrice}>{listing.priceText}</Text>
         <Text style={styles.postMeta}>{[listing.sellerNickname, listing.city, listing.country].filter(Boolean).join(' · ')}</Text>
+        {!!(listing.handoffDate || listing.handoffNote || listing.canHold) && <View style={styles.marketHandoffInfo}>
+          <Text style={styles.profileSectionTitle}>인계 정보</Text>
+          {!!listing.handoffDate && <Text style={styles.marketHandoffLine}>인계 가능일: {listing.handoffDate}</Text>}
+          {!!listing.handoffNote && <Text style={styles.marketHandoffLine}>{listing.handoffNote}</Text>}
+          {listing.canHold && <Text style={styles.marketHandoffLine}>✓ 날짜 협의·보관 가능</Text>}
+        </View>}
         {!!listing.description && <Text style={styles.listingDescription}>{listing.description}</Text>}
       </View>
       {isMine ? (
@@ -1952,6 +2042,22 @@ const styles = StyleSheet.create({
   inlineError: { color: COLORS.error, backgroundColor: COLORS.errorSurface, borderRadius: 12, padding: 11, fontSize: 13, lineHeight: 19, marginTop: 12 },
   filterRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   dateRow: { flexDirection: 'row', gap: 10 },
+  marketPhotoRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  marketThumb: { width: 94, height: 100, borderRadius: 12, backgroundColor: COLORS.input },
+  marketDetailImage: { width: '100%', height: 238, borderRadius: 15, backgroundColor: COLORS.input, marginBottom: 16 },
+  marketPhotoPicker: { width: 145, height: 125, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 15, overflow: 'hidden' },
+  marketPhotoPreview: { width: '100%', height: '100%' },
+  marketPhotoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  marketPhotoPlus: { color: COLORS.accent, fontSize: 36, fontWeight: '600' },
+  marketPhotoPickerText: { color: COLORS.subtext, fontSize: 12 },
+  marketRemovePhoto: { marginTop: 7, fontSize: 12, color: COLORS.error },
+  marketHandoffBlock: { marginTop: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 18, padding: 16 },
+  marketHoldRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
+  marketHoldCheck: { fontSize: 26, color: COLORS.accent },
+  marketHoldTitle: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
+  marketHandoffMeta: { marginTop: 6, color: COLORS.accent, fontSize: 11 },
+  marketHandoffInfo: { marginTop: 16, borderWidth: 1, borderColor: COLORS.line, borderRadius: 12, backgroundColor: COLORS.input, padding: 13 },
+  marketHandoffLine: { marginTop: 6, color: COLORS.text, fontSize: 12, lineHeight: 18 },
   marketBlock: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 24, padding: 22, marginBottom: 28 },
   marketBlockTitle: { color: COLORS.text, fontSize: 21, fontWeight: '800' },
   moreTextOnBlock: { color: COLORS.accent, fontSize: 12, fontWeight: '700' },
