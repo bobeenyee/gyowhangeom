@@ -2,6 +2,7 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
+import { decode } from 'base64-arraybuffer';
 
 // Supabase publishable keys are public client identifiers, NOT secrets.
 // Secret / service_role keys must never appear here.
@@ -196,6 +197,11 @@ function toListing(row) {
     countryCode: row.country_code,
     city: row.city,
     status: row.status,
+    photoPath: row.photo_path || null,
+    photoUrl: row.photo_path ? supabase.storage.from('market-photos').getPublicUrl(row.photo_path).data.publicUrl : null,
+    handoffDate: row.handoff_date || '',
+    handoffNote: row.handoff_note || '',
+    canHold: Boolean(row.can_hold),
     time: new Date(row.created_at).toLocaleDateString('ko-KR'),
   };
 }
@@ -212,6 +218,42 @@ export async function createListing(listing) {
     p_price_text: listing.priceText,
     p_category: listing.category,
   }));
+}
+
+// Listings are created with the existing verified-user RPC before optional metadata is saved.
+// The seller-only RLS policy and column grants protect these later updates.
+export async function updateListingHandoff(listingId, details) {
+  unpack(await supabase.from('market_listings').update({
+    handoff_date: details.handoffDate || null,
+    handoff_note: String(details.handoffNote || '').slice(0, 250),
+    can_hold: Boolean(details.canHold),
+  }).eq('id', listingId));
+}
+
+export async function uploadListingPhoto(listingId, userId, base64Image) {
+  const bytes = decode(base64Image);
+  if (bytes.byteLength > 5 * 1024 * 1024) throw new Error('사진은 5MB 이하로 첨부해 주세요.');
+  const path = `${userId}/${listingId}/${Date.now()}-${Math.random().toString(36).slice(2, 11)}.jpg`;
+  const storage = supabase.storage.from('market-photos');
+  unpack(await storage.upload(path, bytes, {
+    contentType: 'image/jpeg',
+    cacheControl: '3600',
+    upsert: false,
+  }));
+  try {
+    const update = await supabase.from('market_listings')
+      .update({ photo_path: path }).eq('id', listingId).eq('seller_id', userId)
+      .select('id');
+    const rows = unpack(update);
+    if (!rows?.length) throw new Error('사진을 등록할 권한이 없어요.');
+  } catch (error) {
+    // Avoid leaving an orphan when attaching the image to the item fails.
+    try { await storage.remove([path]); } catch (cleanupError) {
+      console.warn('Photo cleanup failed:', cleanupError);
+    }
+    throw error;
+  }
+  return storage.getPublicUrl(path).data.publicUrl;
 }
 
 export async function setListingStatus(listingId, status) {
