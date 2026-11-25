@@ -51,7 +51,7 @@ export function ChatSafetyPanel({
             {mode === 'message' && message && (
               <>
                 <Text style={styles.helper}>
-                  신고 내용은 운영 검토용으로만 저장돼요. 차단하면 이 사람의 오픈채팅 메시지가 내 화면에서 보이지 않아요.
+                  신고 내용은 운영 검토용으로만 저장돼요. 차단하면 이 사람의 메시지가 내 화면에서 보이지 않아요.
                 </Text>
                 <View style={styles.message}>
                   <Text style={styles.sender}>{message.senderNickname || '참여자'}</Text>

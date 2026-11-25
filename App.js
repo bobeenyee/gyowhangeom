@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Platform,
   SafeAreaView,
@@ -15,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { AuthScreen, SetupScreen } from './src/components/AuthScreen';
+import { Alert, AppAlertHost } from './src/components/AppAlert';
 import { ChatSafetyPanel } from './src/components/ChatSafetyPanel';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -22,8 +22,9 @@ import {
   FavoriteBoardSection, CommunityScopeSelector, CompactCommunityPost, HomeCommunitySection, boardTitle,
 } from './src/components/ExchangeCommunitySections';
 import { COLORS } from './src/theme';
-import { searchUniversities } from './src/lib/universitySearch';
-import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveInterest as cloudSaveInterest, completeOnboarding as cloudCompleteOnboarding, isUniversityEmail, requestUniversityCode, confirmUniversityCode, loadListings, createListing as cloudCreateListing, updateListingHandoff as cloudUpdateListingHandoff, uploadListingPhoto as cloudUploadListingPhoto, setListingStatus as cloudSetListingStatus, startChat as cloudStartChat, loadChats, loadMessages as cloudLoadMessages, sendMessage as cloudSendMessage, loadOpenChatRooms, createOpenChatRoom, joinOpenChatRoom, leaveOpenChatRoom, loadOpenChatMessages, sendOpenChatMessage, reportOpenChatMessage, blockOpenChatUser, loadBlockedOpenChatUsers, unblockOpenChatUser, saveCheck, loadCheckin, saveCheckin, getCheckinSummary, distanceKm } from './src/lib/cloud';
+import { FAQ } from './src/lib/faq';
+import { searchUniversities, loadUniversity } from './src/lib/universitySearch';
+import { supabase, isCloudConfigured, friendlyError, loadAccount, loadPeople, loadPosts, createPost, createComment, reportPost as cloudReportPost, saveProfile as cloudSaveProfile, saveExchange as cloudSaveExchange, saveInterest as cloudSaveInterest, completeOnboarding as cloudCompleteOnboarding, isUniversityEmail, requestUniversityCode, confirmUniversityCode, loadListings, createListing as cloudCreateListing, updateListingHandoff as cloudUpdateListingHandoff, uploadListingPhoto as cloudUploadListingPhoto, setListingStatus as cloudSetListingStatus, startChat as cloudStartChat, loadChats, loadMessages as cloudLoadMessages, sendMessage as cloudSendMessage, loadOpenChatRooms, createOpenChatRoom, joinOpenChatRoom, leaveOpenChatRoom, loadOpenChatMessages, sendOpenChatMessage, reportOpenChatMessage, blockOpenChatUser, loadBlockedOpenChatUsers, unblockOpenChatUser, saveCheck, addChecklistItem, hideChecklistItem, deleteChecklistItem, restoreChecklistDefaults, loadCheckin, saveCheckin, getCheckinSummary, roomKey, distanceKm, loadFriends, requestFriend, respondFriend, removeFriend, startDirectChat, loadDirectChats, loadDirectMessages, sendDirectMessage, reportDirectMessage, loadCheckinMessages, sendCheckinMessage, reportCheckinMessage, setCheckinBlock, loadCheckinBlocks } from './src/lib/cloud';
 
 
 const YEARS = Array.from({ length: 25 }, (_, index) => 2026 + index);
@@ -115,13 +116,38 @@ const SAMPLE_ROOM_MESSAGES = {
   ],
 };
 
+// ids are saved per account (checklist_items.item_key): never reuse or renumber them.
 const INITIAL_CHECKLIST = [
-  { id: 'c1', group: '출국 전', title: '여권 유효기간 확인', done: true },
-  { id: 'c2', group: '출국 전', title: '비자/거주허가 서류 준비', done: false },
-  { id: 'c3', group: '출국 전', title: '항공권 예약', done: false },
-  { id: 'c4', group: '주거', title: '기숙사 또는 집 계약 확인', done: false },
-  { id: 'c5', group: '학교', title: '수강신청 일정 확인', done: false },
-  { id: 'c6', group: '생활', title: '현지 유심/eSIM 준비', done: false },
+  { id: 'c1', group: '서류·비자', title: '여권 유효기간 확인' },
+  { id: 'c7', group: '서류·비자', title: '입학허가서 받기' },
+  { id: 'c2', group: '서류·비자', title: '비자/거주허가 서류 준비' },
+  { id: 'c8', group: '서류·비자', title: '영문 재학·성적 증명서 발급' },
+  { id: 'c9', group: '서류·비자', title: '여권·비자 사본과 증명사진 챙기기' },
+  { id: 'c3', group: '항공·보험', title: '항공권 예약' },
+  { id: 'c10', group: '항공·보험', title: '유학생 보험 가입' },
+  { id: 'c11', group: '항공·보험', title: '공항에서 숙소까지 가는 방법 확인' },
+  { id: 'c4', group: '주거', title: '기숙사 또는 집 계약 확인' },
+  { id: 'c12', group: '주거', title: '입주 날짜와 보증금 확인' },
+  { id: 'c13', group: '주거', title: '바로 입주하지 못하면 첫 숙소 예약' },
+  { id: 'c5', group: '학교', title: '수강신청 일정 확인' },
+  { id: 'c14', group: '학교', title: '본교 학점 인정 절차 확인' },
+  { id: 'c15', group: '학교', title: '본교 등록금·파견 서류 제출' },
+  { id: 'c16', group: '학교', title: '오리엔테이션 일정 확인' },
+  { id: 'c17', group: '돈', title: '한 달 예산 세우기' },
+  { id: 'c18', group: '돈', title: '해외 결제되는 카드 준비' },
+  { id: 'c19', group: '돈', title: '현지 돈 환전하기' },
+  { id: 'c20', group: '건강', title: '필요한 예방접종 확인' },
+  { id: 'c21', group: '건강', title: '먹는 약과 영문 처방전 준비' },
+  { id: 'c6', group: '생활', title: '현지 유심/eSIM 준비' },
+  { id: 'c22', group: '생활', title: '한국 번호 유지·본인인증 방법 정하기' },
+  { id: 'c23', group: '생활', title: '콘센트 어댑터 준비' },
+  { id: 'c24', group: '생활', title: '날씨에 맞는 옷 챙기기' },
+  { id: 'c25', group: '생활', title: '수하물 무게 제한 확인' },
+  { id: 'c26', group: '도착 후', title: '거주 등록이 필요한지 확인하고 신청' },
+  { id: 'c27', group: '도착 후', title: '학생증 발급' },
+  { id: 'c28', group: '도착 후', title: '교통카드 만들기' },
+  { id: 'c29', group: '도착 후', title: '현지 은행 계좌가 필요한지 확인' },
+  { id: 'c30', group: '도착 후', title: '대사관·긴급 전화번호 저장' },
 ];
 
 const CHECKIN_RESPONSES = [
@@ -137,7 +163,21 @@ const CHECKIN_MESSAGES = [
   '저는 18일! 기숙사 입실 전날이라 하루 호텔 잡았어요.',
 ];
 
+const CHECKLIST_GROUPS = [...new Set(INITIAL_CHECKLIST.map((item) => item.group))];
+
+// The account's own edits on top of the default list: hidden defaults and added items.
+function buildChecklist(checks, edits) {
+  const hidden = new Set(edits.filter((edit) => edit.hidden).map((edit) => edit.id));
+  const added = edits.filter((edit) => !edit.hidden).map(({ id, title, group }) => ({ id, title, group, custom: true }));
+  return [...INITIAL_CHECKLIST.filter((item) => !hidden.has(item.id)), ...added]
+    .map((item) => ({ ...item, done: Boolean(checks[item.id]) }));
+}
+
 export default function App() {
+  return <><MainApp /><AppAlertHost /></>;
+}
+
+function MainApp() {
   const [started, setStarted] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [session, setSession] = useState(null);
@@ -156,6 +196,7 @@ export default function App() {
   const [marketError, setMarketError] = useState('');
   const [selectedListingId, setSelectedListingId] = useState(null);
   const [verifyReturn, setVerifyReturn] = useState('my');
+  const [registerReturn, setRegisterReturn] = useState('home');
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [previewMessages, setPreviewMessages] = useState(isCloudConfigured ? {} : SAMPLE_ROOM_MESSAGES);
@@ -164,6 +205,11 @@ export default function App() {
   const [roomsError, setRoomsError] = useState('');
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [friends, setFriends] = useState([]);
+  const [directChats, setDirectChats] = useState([]);
+  const [selectedDirect, setSelectedDirect] = useState(null);
+  const [directReturn, setDirectReturn] = useState('friends');
+  const [faqReturn, setFaqReturn] = useState('home');
   const [posts, setPosts] = useState(isCloudConfigured ? [] : INITIAL_POSTS);
   const [communityScope, setCommunityScope] = useState('all');
   const [communityBoard, setCommunityBoard] = useState('전체');
@@ -173,7 +219,9 @@ export default function App() {
   const [postReturnScreen, setPostReturnScreen] = useState('community');
   const [postsLoading, setPostsLoading] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState(null);
-  const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
+  const [checks, setChecks] = useState({});
+  const [checklistEdits, setChecklistEdits] = useState([]);
+  const checklist = useMemo(() => buildChecklist(checks, checklistEdits), [checks, checklistEdits]);
   const [checkinAnswer, setCheckinAnswer] = useState('');
   const [profile, setProfile] = useState({
     onboardingDone: false,
@@ -247,7 +295,8 @@ export default function App() {
       setExchangeInfo(account.exchangeInfo);
       setExchangeInterest(account.exchangeInterest);
       setVerification(account.verification);
-      setChecklist(INITIAL_CHECKLIST.map((item) => ({ ...item, done: Boolean(account.checks[item.id]) })));
+      setChecks(account.checks);
+      setChecklistEdits(account.checklistEdits);
       setPosts(remotePosts);
       setCloudNotice('');
     }).catch((e) => {
@@ -329,6 +378,15 @@ export default function App() {
 
   useEffect(() => { refreshMarket(); }, [session?.user?.id, reloadToken]);
 
+  // The home badge and profile buttons need the friend list; the friends screen reports its own errors.
+  useEffect(() => {
+    if (!supabase || !session?.user?.id) return;
+    let active = true;
+    loadFriends().then((items) => { if (active) setFriends(items); })
+      .catch((e) => console.warn('Could not load friends:', friendlyError(e)));
+    return () => { active = false; };
+  }, [session?.user?.id, reloadToken, screen === 'home', screen === 'profile']);
+
   const goHome = () => setScreen('home');
   const openCommunityBoard = (board = '전체') => {
     setCommunityBoard(board);
@@ -347,6 +405,8 @@ export default function App() {
   };
   const isVerified = verification?.status === 'verified';
   const askVerify = (from) => { setVerifyReturn(from); setScreen('verify'); };
+  const askRegister = (from) => { setRegisterReturn(from); setScreen('register'); };
+  const openFaq = (from) => { setFaqReturn(from); setScreen('faq'); };
   const openMarket = () => { refreshMarket(); setScreen('market'); };
   const openRooms = () => { refreshRooms(); setScreen('openChat'); };
 
@@ -376,7 +436,7 @@ export default function App() {
 
   async function submitExchange(choice) {
     await saveExchangeChoice(choice);
-    goHome();
+    setScreen(registerReturn);
   }
 
   async function saveProfileInfo(info) {
@@ -544,6 +604,41 @@ export default function App() {
     await unblockOpenChatUser(session.user.id, user.blockedId);
   }
 
+  async function refreshFriends() {
+    if (!supabase) return;
+    const [people_, chats_] = await Promise.all([loadFriends(), loadDirectChats()]);
+    setFriends(people_);
+    setDirectChats(chats_);
+  }
+
+  async function runFriendAction(action) {
+    if (!supabase) { Alert.alert('미리보기', '미리보기에서는 친구와 메시지를 쓸 수 없어요.'); return; }
+    try { await action(); setFriends(await loadFriends()); }
+    catch (e) { Alert.alert('친구 처리 실패', friendlyError(e)); }
+  }
+  const addFriend = (userId) => runFriendAction(() => requestFriend(userId));
+  const answerFriend = (userId, accept) => runFriendAction(() => respondFriend(userId, accept));
+  const dropFriend = (userId) => runFriendAction(() => removeFriend(userId));
+
+  async function openDirectChat(user, from) {
+    if (!supabase) { Alert.alert('미리보기', '미리보기에서는 친구와 메시지를 쓸 수 없어요.'); return; }
+    try {
+      const id = await startDirectChat(user.id);
+      setSelectedDirect({ id, otherId: user.id, otherNickname: user.nickname });
+      setDirectReturn(from);
+      setScreen('directChat');
+    } catch (e) { Alert.alert('대화를 열지 못했어요', friendlyError(e)); }
+  }
+
+  async function fetchDirectMessages(conversationId) {
+    const items = await loadDirectMessages(conversationId);
+    return items.map((item) => ({ ...item, senderNickname: selectedDirect?.otherNickname }));
+  }
+
+  async function blockDirectUser(message) {
+    await blockOpenChatUser(session.user.id, message.senderId, message.senderNickname);
+  }
+
   async function fetchMessages(conversationId) {
     return supabase ? cloudLoadMessages(conversationId) : previewMessages[conversationId] || [];
   }
@@ -615,14 +710,43 @@ export default function App() {
       try { await saveCheck(session.user.id, id, next); }
       catch (e) { Alert.alert('저장 실패', friendlyError(e)); return; }
     }
-    setChecklist((prev) => prev.map((i) => i.id === id ? { ...i, done: next } : i));
+    setChecks((prev) => ({ ...prev, [id]: next }));
+  }
+
+  async function addCheck(title, group) {
+    const item = { id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), title, group, hidden: false };
+    if (supabase) {
+      try { await addChecklistItem(session.user.id, item); }
+      catch (e) { Alert.alert('추가 실패', friendlyError(e)); return false; }
+    }
+    setChecklistEdits((prev) => [...prev, item]);
+    return true;
+  }
+
+  async function removeCheck(item) {
+    if (supabase) {
+      try { await (item.custom ? deleteChecklistItem : hideChecklistItem)(session.user.id, item.id); }
+      catch (e) { Alert.alert('삭제 실패', friendlyError(e)); return; }
+    }
+    setChecklistEdits((prev) => {
+      const rest = prev.filter((edit) => edit.id !== item.id);
+      return item.custom ? rest : [...rest, { id: item.id, hidden: true }];
+    });
+  }
+
+  async function restoreChecks() {
+    if (supabase) {
+      try { await restoreChecklistDefaults(session.user.id); }
+      catch (e) { Alert.alert('되돌리기 실패', friendlyError(e)); return; }
+    }
+    setChecklistEdits((prev) => prev.filter((edit) => !edit.hidden));
   }
 
   async function signOut() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) Alert.alert('로그아웃 실패', friendlyError(error));
-    else { setPosts([]); setPeople([]); setExchangeInfo(null); setExchangeInterest(null); setVerification(null); setListings([]); setChats([]); setSelectedChat(null); setScreen('home'); }
+    else { setPosts([]); setPeople([]); setExchangeInfo(null); setExchangeInterest(null); setVerification(null); setChecks({}); setChecklistEdits([]); setListings([]); setChats([]); setSelectedChat(null); setFriends([]); setDirectChats([]); setSelectedDirect(null); setScreen('home'); }
   }
 
 
@@ -663,7 +787,7 @@ export default function App() {
   }
 
   if (screen === 'register') {
-    return <ExchangeRegistrationScreen initialValue={exchangeInfo} initialInterest={exchangeInterest} onCancel={goHome} onSave={submitExchange} />;
+    return <ExchangeRegistrationScreen initialValue={exchangeInfo} initialInterest={exchangeInterest} onCancel={() => setScreen(registerReturn)} onSave={submitExchange} />;
   }
   if (screen === 'verify') {
     return (
@@ -703,13 +827,26 @@ export default function App() {
     return <ChatScreen chat={selectedChat} userId={session?.user?.id || 'me'} onLoad={fetchMessages} onSend={postMessage} onBack={() => setScreen('chats')} />;
   }
   if (screen === 'find') {
-    return <FindStudentsScreen exchangeInfo={exchangeInfo} onBack={goHome} onRegister={() => setScreen('register')} users={isCloudConfigured ? people : SAMPLE_USERS} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshPeople : null} onOpenProfile={(user) => { setSelectedUser(user); setScreen('profile'); }} />;
+    return <FindStudentsScreen exchangeInfo={exchangeInfo} onBack={goHome} onRegister={() => askRegister('home')} users={isCloudConfigured ? people : SAMPLE_USERS} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshPeople : null} onOpenProfile={(user) => { setSelectedUser(user); setScreen('profile'); }} />;
   }
   if (screen === 'profile' && selectedUser) {
-    return <StudentProfileScreen user={selectedUser} verified={isVerified} onVerify={() => askVerify('profile')} onBack={() => setScreen('find')} />;
+    return <StudentProfileScreen user={selectedUser} verified={isVerified} friendStatus={friends.find((item) => item.id === selectedUser.id)?.status} onAddFriend={() => addFriend(selectedUser.id)} onAnswerFriend={(accept) => answerFriend(selectedUser.id, accept)} onRemoveFriend={() => dropFriend(selectedUser.id)} onMessage={() => openDirectChat(selectedUser, 'profile')} onVerify={() => askVerify('profile')} onBack={() => setScreen('find')} />;
+  }
+  if (screen === 'faq') {
+    return <FaqScreen onBack={() => setScreen(faqReturn)} onAsk={() => { setCommunityBoard('질문'); setScreen('writePost'); }} />;
+  }
+  if (screen === 'friends') {
+    return <FriendsScreen friends={friends} chats={directChats} verified={isVerified} onVerify={() => askVerify('friends')} onLoad={refreshFriends} onAnswer={answerFriend} onRemove={dropFriend} onMessage={(user) => openDirectChat(user, 'friends')} onOpenChat={(chat) => { setSelectedDirect(chat); setDirectReturn('friends'); setScreen('directChat'); }} onFind={() => setScreen('find')} onLoadBlocked={supabase ? loadRoomBlockList : undefined} onUnblock={unblockRoomUser} onBack={goHome} />;
+  }
+  if (screen === 'directChat' && selectedDirect) {
+    return <ChatScreen chat={selectedDirect} userId={session?.user?.id || 'me'} backLabel="‹ 뒤로" onLoad={fetchDirectMessages} onSend={sendDirectMessage} onBack={() => setScreen(directReturn)} onReport={(message, reason) => reportDirectMessage(message.id, reason)} onBlock={blockDirectUser} onLoadBlocked={loadRoomBlockList} onUnblock={unblockRoomUser} />;
+  }
+  if (screen === 'checkinChat' && exchangeInfo && roomKey(exchangeInfo)) {
+    const room = roomKey(exchangeInfo);
+    return <ChatScreen chat={{ id: room, otherNickname: '익명 대화', listingTitle: exchangeInfo.city + ' · ' + exchangeInfo.semester }} userId={session?.user?.id || 'me'} showSender backLabel="‹ 체크인" onLoad={(id) => loadCheckinMessages(id, session.user.id)} onSend={sendCheckinMessage} onBack={() => setScreen('checkin')} onReport={(message, reason) => reportCheckinMessage(message.id, reason)} onBlock={(message) => setCheckinBlock(room, message.alias, true)} onLoadBlocked={() => loadCheckinBlocks(room)} onUnblock={(user) => setCheckinBlock(room, user.blockedId, false)} />;
   }
   if (screen === 'community') {
-    return <CommunityScreen posts={posts} scope={communityScope} onChangeScope={setCommunityScope} exchangeInfo={exchangeInfo} semester={activeCommunitySemester} onChangeSemester={setCommunitySemester} category={communityBoard} onChangeCategory={setCommunityBoard} favorites={favoriteBoards} onToggleFavorite={toggleFavoriteBoard} loading={postsLoading} onRefresh={isCloudConfigured ? refreshCommunity : null} onHome={goHome} onWrite={() => setScreen('writePost')} onOpen={(id) => openCommunityPost(id)} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
+    return <CommunityScreen posts={posts} scope={communityScope} onChangeScope={setCommunityScope} exchangeInfo={exchangeInfo} semester={activeCommunitySemester} onChangeSemester={setCommunitySemester} category={communityBoard} onChangeCategory={setCommunityBoard} favorites={favoriteBoards} onToggleFavorite={toggleFavoriteBoard} loading={postsLoading} onRefresh={isCloudConfigured ? refreshCommunity : null} onHome={goHome} onWrite={() => setScreen('writePost')} onFaq={() => openFaq('community')} onOpen={(id) => openCommunityPost(id)} onMy={() => setScreen('my')} onFind={() => setScreen('find')} />;
   }
   if (screen === 'writePost') {
     if (!isVerified) return <VerifyGateScreen title="글쓰기" message="글은 누구나 읽을 수 있지만, 쓰려면 대학 인증이 필요해요." onBack={() => setScreen('community')} onVerify={() => askVerify('writePost')} />;
@@ -720,13 +857,13 @@ export default function App() {
     return <PostDetailScreen post={post} verified={isVerified} onVerify={() => askVerify('postDetail')} onBack={() => setScreen(postReturnScreen)} onAddComment={submitComment} onReport={isCloudConfigured && isVerified ? confirmReport : null} />;
   }
   if (screen === 'checkin') {
-    return <CheckInScreen verified={isVerified} onVerify={() => askVerify('checkin')} exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={submitCheckin} responses={isCloudConfigured ? checkinSummary : CHECKIN_RESPONSES} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshCheckin : null} onBack={goHome} />;
+    return <CheckInScreen verified={isVerified} onVerify={() => askVerify('checkin')} onRegister={() => askRegister('checkin')} exchangeInfo={exchangeInfo} answer={checkinAnswer} onAnswer={submitCheckin} responses={isCloudConfigured ? checkinSummary : CHECKIN_RESPONSES} preview={!isCloudConfigured} onRefresh={isCloudConfigured ? refreshCheckin : null} onChat={() => setScreen('checkinChat')} onBack={goHome} />;
   }
   if (screen === 'checklist') {
-    return <ChecklistScreen verified={isVerified} onVerify={() => askVerify('checklist')} items={checklist} onBack={goHome} onToggle={toggleCheck} />;
+    return <ChecklistScreen verified={isVerified} onVerify={() => askVerify('checklist')} items={checklist} hasHidden={checklistEdits.some((edit) => edit.hidden)} onAdd={addCheck} onRemove={removeCheck} onRestore={restoreChecks} onBack={goHome} onToggle={toggleCheck} />;
   }
   if (screen === 'my') {
-    return <MyScreen profile={profile} exchangeInfo={exchangeInfo} exchangeInterest={exchangeInterest} verification={verification} onVerify={() => askVerify('my')} onSave={submitProfile} onSignOut={isCloudConfigured ? signOut : null} onBack={goHome} onEditExchange={() => setScreen('register')} onFind={() => setScreen('find')} onCommunity={() => setScreen('community')} />;
+    return <MyScreen profile={profile} exchangeInfo={exchangeInfo} exchangeInterest={exchangeInterest} verification={verification} onVerify={() => askVerify('my')} onSave={submitProfile} onSignOut={isCloudConfigured ? signOut : null} onBack={goHome} onEditExchange={() => askRegister('home')} onFind={() => setScreen('find')} onCommunity={() => setScreen('community')} />;
   }
 
   return (
@@ -736,8 +873,11 @@ export default function App() {
       listings={listings}
       onMarket={openMarket}
       onOpenChat={openRooms}
+      onFriends={() => setScreen('friends')}
+      onFaq={() => openFaq('home')}
+      friendRequests={friends.filter((item) => item.status === 'incoming').length}
       profile={profile}
-      onRegister={() => setScreen('register')}
+      onRegister={() => askRegister('home')}
       onFind={() => setScreen('find')}
       onCommunity={() => openCommunityBoard('전체')}
       onFavoriteBoard={openCommunityBoard}
@@ -757,7 +897,8 @@ export default function App() {
 function ExchangeRegistrationScreen({ initialValue, initialInterest, onCancel, onSave, onboarding = false }) {
   const initialSemester = parseSemester(initialValue?.semester);
   const initialSchool = initialValue || (initialInterest?.universityId ? initialInterest : null);
-  const [mode, setMode] = useState(initialInterest && !initialValue ? 'interest' : 'going');
+  // People come here to register an exchange, so a saved interest must not preselect "아직 미정" again.
+  const [mode, setMode] = useState('going');
   const [region, setRegion] = useState(initialInterest?.region || '');
   const [startText, setStartText] = useState(displayDate(initialValue?.startDate));
   const [endText, setEndText] = useState(displayDate(initialValue?.endDate));
@@ -831,7 +972,14 @@ function ExchangeRegistrationScreen({ initialValue, initialInterest, onCancel, o
       choice = { exchangeInterest: { region: region.trim(), universityId: selectedUniversity?.id || '', universityName: selectedUniversity?.name || '', country: selectedUniversity?.country || '', countryCode: selectedUniversity?.countryCode || '', city: selectedUniversity?.city || '' } };
     }
     setSaving(true);
-    try { await onSave(choice); }
+    try {
+      // A school carried over from a saved interest has no coordinates, which the nearby filter needs.
+      if (choice.exchangeInfo && choice.exchangeInfo.latitude == null) {
+        const found = await loadUniversity(choice.exchangeInfo.universityId).catch(() => null);
+        if (found) Object.assign(choice.exchangeInfo, { latitude: found.latitude, longitude: found.longitude });
+      }
+      await onSave(choice);
+    }
     catch (e) { setSaveError(friendlyError(e)); setSaving(false); }
   }
 
@@ -845,6 +993,7 @@ function ExchangeRegistrationScreen({ initialValue, initialInterest, onCancel, o
           <ChoiceChip label="파견 예정 · 파견 중" active={mode === 'going'} onPress={() => setMode('going')} />
           <ChoiceChip label="아직 미정" active={mode === 'interest'} onPress={() => setMode('interest')} />
         </View>
+        {mode === 'interest' && <Text style={styles.helperText}>여기서는 관심 지역과 대학만 저장돼요. 파견이 정해졌다면 '파견 예정 · 파견 중'을 선택해 주세요.</Text>}
         {mode === 'interest' && <Field label="관심 지역">
           <View style={[styles.filterRowWrap, { marginTop: 0, marginBottom: 10 }]}>{INTEREST_REGIONS.map((item) => <ChoiceChip key={item} label={item} active={region === item} onPress={() => setRegion(item)} />)}</View>
           <TextInput style={[styles.input, missingRequired && styles.inputRequired]} value={region} onChangeText={setRegion} placeholder="직접 입력 (예: 덴마크, 코펜하겐)" placeholderTextColor="#A1A7A2" />
@@ -888,7 +1037,7 @@ function ExchangeRegistrationScreen({ initialValue, initialInterest, onCancel, o
           {Object.entries(COURSE_STATUS).map(([key, label]) => <ChoiceChip key={key} label={label} active={courseStatus === key} onPress={() => setCourseStatus(key)} />)}
         </View></>}
         {!!saveError && <Text style={styles.inlineError}>{saveError}</Text>}
-        <PrimaryButton disabled={saving} dimmed={!canSave} label={saving ? '저장하는 중...' : onboarding ? '완료하고 시작하기' : '저장하기'} onPress={save} />
+        <PrimaryButton disabled={saving} dimmed={!canSave} label={saving ? '저장하는 중...' : onboarding ? '완료하고 시작하기' : mode === 'going' ? '파견 정보 저장하기' : '관심 지역 저장하기'} onPress={save} />
       </ScrollView>
     </Screen>
   );
@@ -990,7 +1139,18 @@ function StudentCard({ user, reason, onPress }) {
   );
 }
 
-function StudentProfileScreen({ user, verified, onVerify, onBack }) {
+function StudentProfileScreen({ user, verified, friendStatus, onAddFriend, onAnswerFriend, onRemoveFriend, onMessage, onVerify, onBack }) {
+  const [busy, setBusy] = useState(false);
+  async function run(action) {
+    if (busy) return;
+    setBusy(true);
+    try { await action(); } finally { setBusy(false); }
+  }
+  const friendAction = {
+    friend: { label: '친구 끊기', run: () => Alert.alert('친구 끊기', `${user.nickname}님과 친구를 끊을까요?`, [{ text: '취소', style: 'cancel' }, { text: '친구 끊기', style: 'destructive', onPress: () => run(onRemoveFriend) }]) },
+    incoming: { label: '친구 요청 수락', run: () => run(() => onAnswerFriend(true)) },
+    sent: { label: '요청 취소', run: () => run(onRemoveFriend) },
+  }[friendStatus] || { label: '친구추가', run: () => run(onAddFriend) };
   return (
     <Screen>
       <TopHeader title="프로필" onBack={onBack} backLabel="‹ 찾기" />
@@ -1011,17 +1171,100 @@ function StudentProfileScreen({ user, verified, onVerify, onBack }) {
         <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>커뮤니티에서는 공개 프로필이 표시되지 않아요</Text><Text style={styles.privacyNoticeBody}>일반 이용자에게는 게시글 작성자와 이 프로필의 연결 정보가 제공되지 않아요.</Text></View>
         {!verified && <VerifyNotice message="프로필은 누구나 볼 수 있지만, 친구추가와 메시지는 대학 인증 후에 할 수 있어요." onVerify={onVerify} />}
         {verified && <View style={styles.profileActionRow}>
-          <TouchableOpacity style={styles.profileActionButton} onPress={() => Alert.alert("친구추가 준비 중", "실제 회원 간 친구 요청 기능은 다음 단계에서 연결할게요.")}><Text style={styles.profileActionText}>친구추가</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.profileMessageButton} onPress={() => Alert.alert("메시지 준비 중", "아직 채팅 서버가 연결되지 않았어요.")}><Text style={styles.profileMessageButtonText}>메시지</Text></TouchableOpacity>
+          <TouchableOpacity disabled={busy} style={styles.profileActionButton} onPress={friendAction.run}><Text style={styles.profileActionText}>{friendAction.label}</Text></TouchableOpacity>
+          <TouchableOpacity disabled={busy} style={styles.profileMessageButton} onPress={() => run(onMessage)}><Text style={styles.profileMessageButtonText}>메시지</Text></TouchableOpacity>
         </View>}
       </ScrollView>
     </Screen>
   );
 }
 
+function FriendsScreen({ friends, chats, verified, onVerify, onLoad, onAnswer, onRemove, onMessage, onOpenChat, onFind, onLoadBlocked, onUnblock, onBack }) {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState([]);
+
+  async function refresh() {
+    try {
+      await onLoad();
+      if (onLoadBlocked) setBlocked(await onLoadBlocked());
+      setError('');
+    } catch (e) { setError(friendlyError(e)); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => {
+    refresh();
+    const timer = setInterval(refresh, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  async function run(action) {
+    if (busy) return;
+    setBusy(true);
+    try { await action(); await refresh(); }
+    catch (e) { setError(friendlyError(e)); }
+    finally { setBusy(false); }
+  }
+  const confirmRemove = (user) => Alert.alert('친구 끊기', `${user.nickname}님과 친구를 끊을까요?`, [
+    { text: '취소', style: 'cancel' },
+    { text: '친구 끊기', style: 'destructive', onPress: () => run(() => onRemove(user.id)) },
+  ]);
+  const of = (status) => friends.filter((item) => item.status === status);
+  const incoming = of('incoming'), accepted = of('friend'), sent = of('sent');
+  const row = (user, actions) => (
+    <View key={user.id} style={styles.communityPost}>
+      <Text style={styles.postTitle}>{user.nickname}</Text>
+      <Text style={styles.postMeta}>{[user.universityName, user.city].filter(Boolean).join(' · ') || '파견 정보 없음'}</Text>
+      <View style={styles.filterRowWrap}>{actions.map(([label, onPress, active]) => <ChoiceChip key={label} label={label} active={active} onPress={onPress} />)}</View>
+    </View>
+  );
+  return (
+    <Screen><TopHeader title="친구 · 메시지" onBack={onBack} /><ScrollView contentContainerStyle={styles.postDetailContent}>
+      {!verified && <VerifyNotice message="친구추가와 메시지는 대학 인증 후에 할 수 있어요." onVerify={onVerify} />}
+      {!!error && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>불러오지 못했어요</Text><Text style={styles.noticeBody}>{error}</Text></View>}
+      {loading && <ActivityIndicator color={COLORS.accent} style={{ marginBottom: 16 }} />}
+      {incoming.length > 0 && <><Text style={styles.sectionTitle}>받은 친구 요청 {incoming.length}</Text>{incoming.map((user) => row(user, [['수락', () => run(() => onAnswer(user.id, true)), true], ['거절', () => run(() => onAnswer(user.id, false)), false]]))}</>}
+      <Text style={[styles.sectionTitle, { marginTop: 10 }]}>대화 {chats.length}</Text>
+      {!loading && chats.length === 0 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>아직 대화가 없어요</Text><Text style={styles.noticeBody}>교환학생 찾기에서 마음이 맞는 사람에게 메시지를 보내 보세요.</Text></View>}
+      {chats.map((chat) => <TouchableOpacity key={chat.id} style={styles.communityPost} onPress={() => onOpenChat(chat)}>
+        <View style={styles.inlineRow}><Text style={styles.postTitle}>{chat.otherNickname}</Text><Text style={styles.postTime}>{chat.time}</Text></View>
+        <Text numberOfLines={1} style={styles.postMeta}>{chat.lastBody || '아직 메시지가 없어요'}</Text>
+      </TouchableOpacity>)}
+      <Text style={[styles.sectionTitle, { marginTop: 10 }]}>친구 {accepted.length}</Text>
+      {!loading && accepted.length === 0 && <View style={styles.noticeBox}><Text style={styles.noticeTitle}>아직 친구가 없어요</Text><Text style={styles.noticeBody}>교환학생 찾기에서 친구를 추가해 보세요.</Text></View>}
+      {accepted.map((user) => row(user, [['메시지', () => onMessage(user), true], ['친구 끊기', () => confirmRemove(user), false]]))}
+      {sent.length > 0 && <><Text style={[styles.sectionTitle, { marginTop: 10 }]}>보낸 요청 {sent.length}</Text>{sent.map((user) => row(user, [['요청 취소', () => run(() => onRemove(user.id)), false]]))}</>}
+      {blocked.length > 0 && <><Text style={[styles.sectionTitle, { marginTop: 10 }]}>차단한 사람 {blocked.length}</Text>{blocked.map((user) => <View key={user.blockedId} style={styles.communityPost}><Text style={styles.postTitle}>{user.nickname || '차단한 사용자'}</Text><View style={styles.filterRowWrap}><ChoiceChip label="차단 해제" onPress={() => run(() => onUnblock(user))} /></View></View>)}</>}
+      <SecondaryButton label="교환학생 찾기" onPress={onFind} />
+    </ScrollView></Screen>
+  );
+}
+
+function FaqScreen({ onBack, onAsk }) {
+  const [openId, setOpenId] = useState(null);
+  return (
+    <Screen><TopHeader title="자주 묻는 질문" onBack={onBack} backLabel="‹ 뒤로" /><ScrollView contentContainerStyle={styles.postDetailContent}>
+      <Text style={styles.helperText}>나라와 학교마다 다르고 바뀔 수 있어요. 중요한 내용은 대사관이나 학교의 공식 안내를 꼭 확인하세요.</Text>
+      {FAQ.map((item) => {
+        const open = item.id === openId;
+        return (
+          <View key={item.id} style={styles.faqItem}>
+            <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: open }} style={styles.faqQuestionRow} onPress={() => setOpenId(open ? null : item.id)}>
+              <Text style={styles.faqQuestion}>{item.question}</Text><Text style={styles.moreText}>{open ? '접기' : '보기'}</Text>
+            </TouchableOpacity>
+            {open && <Text style={styles.faqAnswer}>{item.answer}</Text>}
+          </View>
+        );
+      })}
+      <SecondaryButton label="찾는 답이 없으면 질문 올리기" onPress={onAsk} />
+    </ScrollView></Screen>
+  );
+}
+
 function CommunityScreen({
   posts, scope, onChangeScope, exchangeInfo, semester, onChangeSemester,
-  loading, onRefresh, onHome, onWrite, onOpen, onMy, onFind,
+  loading, onRefresh, onHome, onWrite, onFaq, onOpen, onMy, onFind,
   category, onChangeCategory, favorites, onToggleFavorite,
 }) {
   const [sortBy, setSortBy] = useState('new');
@@ -1044,6 +1287,9 @@ function CommunityScreen({
           exchangeInfo={exchangeInfo} semester={semester} onSemesterChange={onChangeSemester}
         />
         <FavoriteBoardSection favorites={favorites} onToggle={onToggleFavorite} onOpen={onChangeCategory} />
+        <TouchableOpacity accessibilityRole="button" style={styles.faqLink} onPress={onFaq}>
+          <Text style={styles.faqLinkText}>자주 묻는 질문 FAQ</Text><Text style={styles.moreText}>보기 ›</Text>
+        </TouchableOpacity>
         <View style={styles.boardBrowseHeader}>
           <Text style={styles.communityBrowseTitle}>게시판 둘러보기</Text>
           {onRefresh && <TouchableOpacity accessibilityRole="button" onPress={onRefresh}><Text style={styles.moreText}>↻ 새로고침</Text></TouchableOpacity>}
@@ -1100,20 +1346,35 @@ function WritePostScreen({ onCancel, onSubmit, initialCategory = '질문' }) {
   const [category, setCategory] = useState(COMMUNITY_BOARDS.some((item) => item.key === initialCategory) ? initialCategory : '질문');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  async function submit() {
+    if (sending) return;
+    setSending(true);
+    try { await onSubmit({ category, title: title.trim(), body: body.trim(), meta: '내 파견 커뮤니티' }); }
+    finally { setSending(false); }
+  }
   return (
     <Screen><ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled"><TopHeader title="익명 글쓰기" onBack={onCancel} backLabel="취소" />
       <Text style={styles.fieldLabel}>카테고리</Text><View style={[styles.filterRow, { flexWrap: 'wrap' }]}>{['질문', '생활', '수업', '여행메이트'].map((item) => <TouchableOpacity key={item} style={[styles.filterChip, category === item && styles.filterChipActive]} onPress={() => setCategory(item)}><Text style={[styles.filterChipText, category === item && styles.filterChipTextActive]}>{item}</Text></TouchableOpacity>)}</View>
-      <Text style={styles.fieldLabel}>제목</Text><TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="제목을 입력하세요" placeholderTextColor="#A1A7A2" />
-      <Text style={[styles.fieldLabel, { marginTop: 18 }]}>내용</Text><TextInput style={styles.textArea} value={body} onChangeText={setBody} placeholder="익명으로 자유롭게 물어보세요" placeholderTextColor="#A1A7A2" multiline textAlignVertical="top" />
+      <Text style={styles.fieldLabel}>제목</Text><TextInput style={styles.input} value={title} maxLength={120} onChangeText={setTitle} placeholder="제목을 입력하세요" placeholderTextColor="#A1A7A2" />
+      <Text style={[styles.fieldLabel, { marginTop: 18 }]}>내용</Text><TextInput style={styles.textArea} value={body} maxLength={4000} onChangeText={setBody} placeholder="익명으로 자유롭게 물어보세요" placeholderTextColor="#A1A7A2" multiline textAlignVertical="top" />
       <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>이 글은 사람찾기 프로필과 연결되지 않아요</Text><Text style={styles.privacyNoticeBody}>닉네임, 한국 대학, 파견 프로필은 게시글에 노출되지 않습니다.</Text></View>
-      <PrimaryButton disabled={!title.trim() || !body.trim()} label="익명으로 올리기" onPress={() => onSubmit({ category, title: title.trim(), body: body.trim(), meta: '내 파견 커뮤니티' })} />
+      <PrimaryButton disabled={!title.trim() || !body.trim() || sending} label={sending ? '올리는 중...' : '익명으로 올리기'} onPress={submit} />
     </ScrollView></Screen>
   );
 }
 
 function PostDetailScreen({ post, verified, onVerify, onBack, onAddComment, onReport }) {
   const [comment, setComment] = useState('');
-  if (!post) return <Screen><TopHeader title="게시글" onBack={onBack} /><View style={styles.emptyState}><Text>게시글을 찾을 수 없어요.</Text></View></Screen>;
+  const [sending, setSending] = useState(false);
+  async function submitComment() {
+    if (!comment.trim() || sending) return;
+    setSending(true);
+    try { await onAddComment(comment.trim()); setComment(''); }
+    catch (_e) { /* caller displays error */ }
+    finally { setSending(false); }
+  }
+  if (!post) return <Screen><TopHeader title="게시글" onBack={onBack} /><View style={styles.emptyState}><Text style={styles.emptyBody}>게시글을 찾을 수 없어요.</Text></View></Screen>;
   return (
     <Screen><TopHeader title="게시글" onBack={onBack} backLabel="‹ 커뮤니티" /><ScrollView contentContainerStyle={styles.postDetailContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.postCategory}>{post.category}</Text><Text style={styles.postDetailTitle}>{post.title}</Text><Text style={styles.postDetailMeta}>익명 · {post.meta} · {post.time}</Text><Text style={styles.postDetailBody}>{post.body}</Text>
@@ -1121,12 +1382,12 @@ function PostDetailScreen({ post, verified, onVerify, onBack, onAddComment, onRe
       <Text style={styles.commentHeader}>댓글 {post.comments.length}</Text>
       {post.comments.map((item, index) => <View key={`${item}-${index}`} style={styles.commentCard}><Text style={styles.commentAuthor}>익명{index + 1}</Text><Text style={styles.commentText}>{item}</Text></View>)}
       {!verified && <View style={{ marginTop: 12 }}><VerifyNotice message="댓글은 대학 인증 후에 쓸 수 있어요." onVerify={onVerify} /></View>}
-      {verified && <View style={styles.commentInputRow}><TextInput style={styles.commentInput} value={comment} onChangeText={setComment} placeholder="익명 댓글 입력" placeholderTextColor="#A1A7A2" /><TouchableOpacity style={styles.commentSend} onPress={async () => { if (!comment.trim()) return; try { await onAddComment(comment.trim()); setComment(''); } catch (_e) { /* caller displays error */ } }}><Text style={styles.commentSendText}>등록</Text></TouchableOpacity></View>}
+      {verified && <View style={styles.commentInputRow}><TextInput style={styles.commentInput} value={comment} maxLength={1000} onChangeText={setComment} onSubmitEditing={submitComment} placeholder="익명 댓글 입력" placeholderTextColor="#A1A7A2" /><TouchableOpacity disabled={sending || !comment.trim()} style={[styles.commentSend, (sending || !comment.trim()) && styles.saveButtonDisabled]} onPress={submitComment}><Text style={styles.commentSendText}>등록</Text></TouchableOpacity></View>}
     </ScrollView></Screen>
   );
 }
 
-function CheckInScreen({ verified, onVerify, exchangeInfo, answer, responses = [], preview = false, onRefresh, onAnswer, onBack }) {
+function CheckInScreen({ verified, onVerify, onRegister, exchangeInfo, answer, responses = [], preview = false, onRefresh, onAnswer, onChat, onBack }) {
   const [draft, setDraft] = useState(answer);
   const [sending, setSending] = useState(false);
   const revealed = Boolean(answer);
@@ -1146,7 +1407,12 @@ function CheckInScreen({ verified, onVerify, exchangeInfo, answer, responses = [
       <Text style={styles.checkinQuestion}>✈️ 출국 예정일이 언제예요?</Text>
       <Text style={styles.checkinGuide}>답변은 다른 참여자에게 익명으로 공개돼요. 답해야 다른 답변도 볼 수 있어요.</Text>
       {!revealed && !verified && <VerifyNotice message="체크인 방은 누구나 둘러볼 수 있지만, 답변하고 다른 사람의 답을 보려면 대학 인증이 필요해요." onVerify={onVerify} />}
-      {!revealed && verified && <>
+      {!revealed && verified && !exchangeInfo && <View style={styles.mySection}>
+        <Text style={styles.profileSectionTitle}>파견 정보가 필요해요</Text>
+        <Text style={styles.helperText}>같은 도시와 학기로 가는 사람들과 답변을 나누는 방이라, 파견 대학과 학기를 먼저 등록해야 해요.</Text>
+        <TouchableOpacity style={styles.formSubmit} onPress={onRegister}><Text style={styles.formSubmitText}>파견 정보 등록하기</Text></TouchableOpacity>
+      </View>}
+      {!revealed && verified && exchangeInfo && <>
         <TextInput style={styles.input} value={draft} maxLength={40} onChangeText={setDraft} placeholder="예: 1월 22일" placeholderTextColor="#A1A7A2" />
         <PrimaryButton disabled={!draft.trim() || !exchangeInfo || sending} label={sending ? '저장하는 중...' : '답변하고 다른 사람 답 보기'} onPress={submit} />
       </>}
@@ -1161,20 +1427,62 @@ function CheckInScreen({ verified, onVerify, exchangeInfo, answer, responses = [
         </View>)}
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>익명 대화</Text>
         {preview ? CHECKIN_MESSAGES.map((message, index) => <View key={message} style={styles.roomMessage}><Text style={styles.commentAuthor}>예시 익명{index + 1}</Text><Text style={styles.commentText}>{message}</Text></View>)
-          : <Text style={styles.emptyBody}>익명 단체 채팅은 아직 연결되지 않았어요. 다음 개발 단계에서 추가할게요.</Text>}
+          : <>
+            <Text style={styles.emptyBody}>같은 도시와 학기로 가는 사람들과 익명으로 이야기해요. 이름 대신 번호만 보여요.</Text>
+            <PrimaryButton label="익명 대화 들어가기" onPress={onChat} />
+          </>}
       </>}
     </ScrollView></Screen>
   );
 }
 
-function ChecklistScreen({ verified, onVerify, items, onBack, onToggle }) {
+function ChecklistScreen({ verified, onVerify, items, hasHidden, onAdd, onRemove, onRestore, onBack, onToggle }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState('');
+  const [group, setGroup] = useState(CHECKLIST_GROUPS[0]);
+  const [busy, setBusy] = useState(false);
   const done = items.filter((item) => item.done).length;
-  const groups = [...new Set(items.map((item) => item.group))];
+  const groups = [...new Set([...CHECKLIST_GROUPS, ...items.map((item) => item.group)])].filter((name) => items.some((item) => item.group === name));
+
+  async function run(action) {
+    if (busy) return;
+    setBusy(true);
+    try { await action(); } finally { setBusy(false); }
+  }
+  const add = () => run(async () => { if (title.trim() && await onAdd(title.trim(), group)) setTitle(''); });
+  // A default item can be brought back; an added one cannot, so only that one asks first.
+  const remove = (item) => {
+    if (!item.custom) { run(() => onRemove(item)); return; }
+    Alert.alert('항목 삭제', `"${item.title}" 항목을 삭제할까요? 되돌릴 수 없어요.`, [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => run(() => onRemove(item)) },
+    ]);
+  };
+
   return (
-    <Screen><TopHeader title="준비 체크" onBack={onBack} /><ScrollView contentContainerStyle={styles.checklistContent}>
+    <Screen><TopHeader title="준비 체크" onBack={onBack} /><ScrollView contentContainerStyle={styles.checklistContent} keyboardShouldPersistTaps="handled">
       {!verified && <VerifyNotice message="준비 목록은 누구나 볼 수 있지만, 체크해서 저장하려면 대학 인증이 필요해요." onVerify={onVerify} />}
-      <View style={styles.progressCard}><Text style={styles.progressTitle}>출국 준비 {done}/{items.length}</Text><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(done / items.length) * 100}%` }]} /></View></View>
-      {groups.map((group) => <View key={group}><Text style={styles.checkGroup}>{group}</Text>{items.filter((item) => item.group === group).map((item) => <TouchableOpacity key={item.id} disabled={!verified} style={styles.checkItem} onPress={() => onToggle(item.id)}><View style={[styles.checkBox, item.done && styles.checkBoxDone]}><Text style={styles.checkMark}>{item.done ? '✓' : ''}</Text></View><Text style={[styles.checkText, item.done && styles.checkTextDone]}>{item.title}</Text></TouchableOpacity>)}</View>)}
+      <View style={styles.progressCard}>
+        <View style={[styles.sectionRow, { marginBottom: 0 }]}>
+          <Text style={styles.progressTitle}>교환 준비 {done}/{items.length}</Text>
+          {verified && <TouchableOpacity accessibilityRole="button" style={styles.checkEditButton} onPress={() => setEditing((value) => !value)}><Text style={styles.moreText}>{editing ? '완료' : '편집'}</Text></TouchableOpacity>}
+        </View>
+        <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${items.length ? (done / items.length) * 100 : 0}%` }]} /></View>
+      </View>
+      {editing && <View style={styles.mySection}>
+        <Text style={styles.profileSectionTitle}>항목 추가</Text>
+        <View style={[styles.filterRowWrap, { marginBottom: 12 }]}>{CHECKLIST_GROUPS.map((name) => <ChoiceChip key={name} label={name} active={group === name} onPress={() => setGroup(name)} />)}</View>
+        <TextInput style={styles.input} value={title} maxLength={60} onChangeText={setTitle} onSubmitEditing={add} placeholder="예: 국제학생증 만들기" placeholderTextColor="#A1A7A2" />
+        <TouchableOpacity disabled={busy || !title.trim()} style={[styles.formSubmit, (busy || !title.trim()) && styles.saveButtonDisabled]} onPress={add}><Text style={styles.formSubmitText}>추가하기</Text></TouchableOpacity>
+        {hasHidden && <SecondaryButton label="삭제한 기본 항목 되돌리기" onPress={() => run(onRestore)} />}
+      </View>}
+      {items.length === 0 && <Text style={styles.emptyBody}>항목이 없어요. 편집을 눌러 추가해 보세요.</Text>}
+      {groups.map((name) => <View key={name}><Text style={styles.checkGroup}>{name}</Text>{items.filter((item) => item.group === name).map((item) => (
+        <View key={item.id} style={styles.checkItem}>
+          <TouchableOpacity disabled={!verified || editing} style={styles.checkItemMain} onPress={() => onToggle(item.id)}><View style={[styles.checkBox, item.done && styles.checkBoxDone]}><Text style={styles.checkMark}>{item.done ? '✓' : ''}</Text></View><Text style={[styles.checkText, { flex: 1 }, item.done && styles.checkTextDone]}>{item.title}</Text></TouchableOpacity>
+          {editing && <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${item.title} 삭제`} disabled={busy} style={styles.checkDelete} onPress={() => remove(item)}><Text style={styles.checkDeleteText}>삭제</Text></TouchableOpacity>}
+        </View>
+      ))}</View>)}
     </ScrollView></Screen>
   );
 }
@@ -1197,13 +1505,12 @@ function MyScreen({ profile, exchangeInfo, exchangeInterest, verification, onVer
       <PrimaryButton label="프로필 저장" onPress={save} />
       <View style={styles.mySection}><Text style={styles.profileSectionTitle}>대학 인증</Text><Text style={styles.helperText}>{verificationCopy(verification).body}</Text><ProfileRow label="상태" value={verificationCopy(verification).label} />{verification?.status !== 'verified' && <SecondaryButton label="인증하러 가기" onPress={onVerify} />}</View>
       <View style={styles.mySection}><Text style={styles.profileSectionTitle}>내 파견 정보</Text>{exchangeInfo ? <><ProfileRow label="대학" value={exchangeInfo.universityName} /><ProfileRow label="학기" value={exchangeInfo.semester} /><SecondaryButton label="파견 정보 수정" onPress={onEditExchange} /></> : exchangeInterest ? <><ProfileRow label="관심" value={interestLabel(exchangeInterest)} /><SecondaryButton label="파견 정보 수정" onPress={onEditExchange} /></> : <SecondaryButton label="파견 정보 등록" onPress={onEditExchange} />}</View>
-      <View style={styles.privacyNotice}><Text style={styles.privacyNoticeTitle}>프로필 사진 · SNS 없음</Text><Text style={styles.privacyNoticeBody}>교환점은 프로필 사진이나 SNS 계정을 수집하지 않아요.</Text></View>
       {onSignOut && <SecondaryButton label="로그아웃" onPress={onSignOut} />}
     </ScrollView><BottomNav active="my" onHome={onBack} onFind={onFind} onCommunity={onCommunity} onMy={() => {}} /></Screen>
   );
 }
 
-function HomeScreen({ exchangeInfo, exchangeInterest, listings, onMarket, onOpenChat, profile, posts, preview, onRegister, onFind, onCommunity, onFavoriteBoard, onToggleFavorite, favorites, onOpenPost, communitySemester, onCheckin, onChecklist, onMy }) {
+function HomeScreen({ exchangeInfo, exchangeInterest, listings, onMarket, onOpenChat, onFriends, onFaq, friendRequests, profile, posts, preview, onRegister, onFind, onCommunity, onFavoriteBoard, onToggleFavorite, favorites, onOpenPost, communitySemester, onCheckin, onChecklist, onMy }) {
   return (
     <Screen><ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><View><Text style={styles.miniBrand}>교환점.</Text><Text style={styles.hello}>{profile.nickname}님, 안녕하세요 👋</Text></View></View>
@@ -1227,6 +1534,8 @@ function HomeScreen({ exchangeInfo, exchangeInterest, listings, onMarket, onOpen
         <QuickCard icon="◉" title="체크인 방" subtitle="답하고 같은 기수 현황 보기" onPress={onCheckin} />
         <QuickCard icon="✓" title="준비 체크" subtitle="비자 · 서류 · 출국 준비" onPress={onChecklist} />
         <QuickCard wide icon="#" title="오픈채팅" subtitle="나라 · 도시 · 관심사별 채팅방 둘러보기" onPress={onOpenChat} />
+        <QuickCard wide icon="＠" title="친구 · 메시지" subtitle={friendRequests ? `받은 친구 요청 ${friendRequests}개` : '친구 목록과 1:1 대화'} onPress={onFriends} />
+        <QuickCard wide icon="?" title="자주 묻는 질문" subtitle="비자 · 서류 · 집 · 보험 · 학점 FAQ" onPress={onFaq} />
       </View>
 
     </ScrollView><BottomNav active="home" onHome={() => {}} onFind={onFind} onCommunity={onCommunity} onMy={onMy} /></Screen>
@@ -1674,10 +1983,10 @@ function ChatScreen({ chat, userId, onLoad, onSend, onBack, onLeave, onReport, o
       {!!chat.listingTitle && <Text style={styles.chatListing} numberOfLines={1}>{chat.listingTitle}</Text>}
       {onLeave && <TouchableOpacity style={styles.chatLeave} onPress={() => onLeave().catch((e) => setError(friendlyError(e)))}><Text style={styles.chatLeaveText}>방 나가기</Text></TouchableOpacity>}
       {onLoadBlocked && <TouchableOpacity style={styles.chatLeave} onPress={openBlockedUsers}><Text style={styles.chatLeaveText}>차단 목록 관리</Text></TouchableOpacity>}
-      {!!moderationNotice && <Text style={[styles.chatLeaveText, { marginHorizontal: 20, marginVertical: 6 }]}>{moderationNotice}</Text>}}
+      {!!moderationNotice && <Text style={[styles.chatLeaveText, { marginHorizontal: 20, marginVertical: 6 }]}>{moderationNotice}</Text>}
       <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={styles.chatContent} onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })} keyboardShouldPersistTaps="handled">
         {messages.length === 0 && <Text style={styles.emptyBody}>첫 메시지를 보내 보세요.</Text>}
-        {messages.map((message) => <View key={message.id} style={[styles.chatBubble, message.senderId === userId && styles.chatBubbleMine]}>{showSender && message.senderId !== userId && <Text style={styles.chatSender}>{message.senderNickname}</Text>}<Text style={[styles.chatText, message.senderId === userId && styles.chatTextMine]}>{message.body}</Text>{showSender && onReport && message.senderId !== userId && <TouchableOpacity accessibilityRole="button" accessibilityLabel="이 메시지 신고 또는 사용자 차단" style={styles.chatSafetyAction} onPress={() => { setModerationNotice(''); setShowBlockList(false); setModerationTarget(message); }}><Text style={styles.chatSafetyActionText}>신고 · 차단</Text></TouchableOpacity>}</View>)}
+        {messages.map((message) => <View key={message.id} style={[styles.chatBubble, message.senderId === userId && styles.chatBubbleMine]}>{showSender && message.senderId !== userId && <Text style={styles.chatSender}>{message.senderNickname}</Text>}<Text style={[styles.chatText, message.senderId === userId && styles.chatTextMine]}>{message.body}</Text>{onReport && message.senderId !== userId && <TouchableOpacity accessibilityRole="button" accessibilityLabel="이 메시지 신고 또는 사용자 차단" style={styles.chatSafetyAction} onPress={() => { setModerationNotice(''); setShowBlockList(false); setModerationTarget(message); }}><Text style={styles.chatSafetyActionText}>신고 · 차단</Text></TouchableOpacity>}</View>)}
       </ScrollView>
       {!!error && <Text style={[styles.inlineError, { marginHorizontal: 20 }]}>{error}</Text>}
       <View style={styles.chatInputRow}>
@@ -1861,7 +2170,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 14, marginBottom: 30 },
   quickCard: { width: '48.5%', minHeight: 142, padding: 16, marginBottom: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 20 },
   quickIconWrap: { width: 38, height: 38, borderRadius: 13, backgroundColor: COLORS.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  quickIcon: { fontSize: 18 },
+  quickIcon: { color: COLORS.accent, fontSize: 18, fontWeight: '700' },
   quickTitle: { color: COLORS.text, fontSize: 15, fontWeight: '800', marginBottom: 5 },
   quickSubtitle: { color: COLORS.subtext, fontSize: 12, lineHeight: 17 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -2017,7 +2326,17 @@ const styles = StyleSheet.create({
   progressTrack: { height: 9, backgroundColor: COLORS.line, borderRadius: 999, overflow: 'hidden', marginTop: 14 },
   progressFill: { height: 9, backgroundColor: COLORS.accent, borderRadius: 999 },
   checkGroup: { color: COLORS.text, fontSize: 15, fontWeight: '800', marginTop: 16, marginBottom: 8 },
-  checkItem: { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14 },
+  faqLink: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, marginBottom: 22, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16 },
+  faqLinkText: { color: COLORS.text, fontSize: 14, fontWeight: '800' },
+  faqItem: { marginBottom: 10, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16 },
+  faqQuestionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  faqQuestion: { flex: 1, color: COLORS.text, fontSize: 14, fontWeight: '800', lineHeight: 20 },
+  faqAnswer: { color: COLORS.subtext, fontSize: 13, lineHeight: 21, paddingHorizontal: 16, paddingBottom: 16 },
+  checkItemMain: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 14 },
+  checkEditButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: COLORS.line },
+  checkDelete: { paddingVertical: 14, paddingHorizontal: 16 },
+  checkDeleteText: { color: COLORS.error, fontSize: 13, fontWeight: '700' },
+  checkItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14 },
   checkBox: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   checkBoxDone: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   checkMark: { color: COLORS.onAccent, fontWeight: '800' },

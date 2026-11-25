@@ -9,7 +9,7 @@ import { decode } from 'base64-arraybuffer';
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || 'https://dtrkktdxalajyncanzlc.supabase.co';
 const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() || 'sb_publishable_ze6DaMfp1x_bUVEyeuAO0Q_I1jeZuwM';
 
-export const isCloudConfigured = Boolean(url && key && /^https:\/\//.test(url));
+export const isCloudConfigured = Boolean(url && key && /^(https:\/\/|http:\/\/(localhost|127\.0\.0\.1):)/.test(url));
 export const supabase = isCloudConfigured
   ? createClient(url, key, {
       auth: {
@@ -87,12 +87,13 @@ export function toInterest(row) {
 }
 
 export async function loadAccount(userId) {
-  const [profileResult, exchangeResult, checklistResult, interestResult, verificationResult] = await Promise.all([
+  const [profileResult, exchangeResult, checklistResult, interestResult, verificationResult, editsResult] = await Promise.all([
     supabase.from('people_profiles').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('exchange_assignments').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('checklist_items').select('item_key,done').eq('user_id', userId),
     supabase.from('exchange_interests').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('university_verifications').select('status,email').eq('user_id', userId).maybeSingle(),
+    supabase.from('checklist_edits').select('item_key,hidden,title,group_name').eq('user_id', userId).order('created_at'),
   ]);
   let rawProfile = unpack(profileResult);
   if (!rawProfile) {
@@ -112,6 +113,7 @@ export async function loadAccount(userId) {
     exchangeInterest: rawExchange ? null : toInterest(unpackOptional(interestResult)),
     verification: rawVerification ? { status: rawVerification.status, email: rawVerification.email } : null,
     checks:Object.fromEntries((rawChecks || []).map(({ item_key, done }) => [item_key, done])),
+    checklistEdits: (unpackOptional(editsResult) || []).map((row) => ({ id: row.item_key, hidden: row.hidden, title: row.title, group: row.group_name })),
   };
 }
 
@@ -279,8 +281,8 @@ export async function loadChats(userId) {
 
 export async function loadMessages(conversationId) {
   const data = unpack(await supabase.from('market_messages').select('id,sender_id,body,created_at')
-    .eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(500));
-  return (data || []).map((row) => ({ id: row.id, senderId: row.sender_id, body: row.body }));
+    .eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(500));
+  return (data || []).reverse().map((row) => ({ id: row.id, senderId: row.sender_id, body: row.body }));
 }
 
 export async function sendMessage(conversationId, body) {
@@ -315,8 +317,8 @@ export async function leaveOpenChatRoom(roomId) {
 
 export async function loadOpenChatMessages(roomId) {
   const data = unpack(await supabase.from('open_chat_messages').select('id,sender_id,sender_nickname,body')
-    .eq('room_id', roomId).order('created_at', { ascending: true }).limit(500));
-  return (data || []).map((row) => ({ id: row.id, senderId: row.sender_id, senderNickname: row.sender_nickname, body: row.body }));
+    .eq('room_id', roomId).order('created_at', { ascending: false }).limit(500));
+  return (data || []).reverse().map((row) => ({ id: row.id, senderId: row.sender_id, senderNickname: row.sender_nickname, body: row.body }));
 }
 
 export async function sendOpenChatMessage(roomId, body) {
@@ -352,6 +354,78 @@ export async function loadBlockedOpenChatUsers(blockerId) {
 export async function unblockOpenChatUser(blockerId, blockedId) {
   unpack(await supabase.from('open_chat_user_blocks').delete()
     .eq('blocker_id', blockerId).eq('blocked_id', blockedId));
+}
+
+export async function loadFriends() {
+  const data = unpack(await supabase.rpc('list_friends'));
+  return (data || []).map((row) => ({
+    id: row.user_id, nickname: row.nickname, universityName: row.university_name, city: row.city,
+    status: row.status === 'accepted' ? 'friend' : row.incoming ? 'incoming' : 'sent',
+  }));
+}
+
+export async function requestFriend(userId) {
+  return unpack(await supabase.rpc('request_friend', { p_user_id: userId }));
+}
+
+export async function respondFriend(userId, accept) {
+  unpack(await supabase.rpc('respond_friend', { p_user_id: userId, p_accept: accept }));
+}
+
+export async function removeFriend(userId) {
+  unpack(await supabase.rpc('remove_friend', { p_user_id: userId }));
+}
+
+export async function startDirectChat(userId) {
+  return unpack(await supabase.rpc('start_direct_chat', { p_user_id: userId }));
+}
+
+export async function loadDirectChats() {
+  const data = unpack(await supabase.rpc('list_direct_chats'));
+  return (data || []).map((row) => ({
+    id: row.id, otherId: row.other_id, otherNickname: row.other_nickname, lastBody: row.last_body || '',
+    time: new Date(row.last_at).toLocaleDateString('ko-KR'),
+  }));
+}
+
+export async function loadDirectMessages(conversationId) {
+  const data = unpack(await supabase.from('direct_messages').select('id,sender_id,body,created_at')
+    .eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(500));
+  return (data || []).reverse().map((row) => ({ id: row.id, senderId: row.sender_id, body: row.body }));
+}
+
+export async function sendDirectMessage(conversationId, body) {
+  unpack(await supabase.rpc('send_direct_message', { p_conversation_id: conversationId, p_body: body }));
+}
+
+export async function reportDirectMessage(messageId, reason) {
+  unpack(await supabase.rpc('report_direct_message', { p_message_id: messageId, p_reason: reason }));
+}
+
+// The server only reveals a per-room number, never who wrote a check-in message.
+export async function loadCheckinMessages(roomKeyText, userId) {
+  const data = unpack(await supabase.rpc('list_checkin_messages', { p_room_key: roomKeyText }));
+  return (data || []).map((row) => ({
+    id: row.id, alias: row.alias, senderId: row.is_mine ? userId : 'alias-' + row.alias,
+    senderNickname: '익명' + row.alias, body: row.body,
+  }));
+}
+
+export async function sendCheckinMessage(roomKeyText, body) {
+  unpack(await supabase.rpc('send_checkin_message', { p_room_key: roomKeyText, p_body: body }));
+}
+
+export async function reportCheckinMessage(messageId, reason) {
+  unpack(await supabase.rpc('report_checkin_message', { p_message_id: messageId, p_reason: reason }));
+}
+
+export async function setCheckinBlock(roomKeyText, alias, blocked) {
+  unpack(await supabase.rpc('set_checkin_block', { p_room_key: roomKeyText, p_alias: alias, p_blocked: blocked }));
+}
+
+export async function loadCheckinBlocks(roomKeyText) {
+  const data = unpack(await supabase.rpc('list_checkin_blocks', { p_room_key: roomKeyText }));
+  return (data || []).map((row) => ({ blockedId: row.alias, nickname: '익명' + row.alias }));
 }
 
 export async function loadPeople(info) {
@@ -391,7 +465,8 @@ export async function loadPosts(exchangeInfo = null, scope = 'all', selectedSeme
   if (semester && semester !== '전체 학기') {
     const match = semester.match(/^(\d{4})년\s(.+)$/);
     if (!match) return [];
-    query = query.eq('year', Number(match[1])).eq('term', match[2]);
+    // Posts without a term, such as notices, belong to every cohort.
+    query = query.or(`and(year.eq.${Number(match[1])},term.eq."${match[2]}"),year.is.null`);
   }
   if (scope !== 'all' && exchangeInfo) {
     if (scope === 'school') query = query.eq('university_id', exchangeInfo.universityId);
@@ -439,6 +514,24 @@ export async function saveCheck(userId, itemKey, done) {
   unpack(await supabase.from('checklist_items').upsert(
     { user_id: userId, item_key: itemKey, done }, { onConflict: 'user_id,item_key' }
   ));
+}
+
+export async function addChecklistItem(userId, item) {
+  unpack(await supabase.from('checklist_edits').insert({ user_id: userId, item_key: item.id, title: item.title, group_name: item.group }));
+}
+
+export async function hideChecklistItem(userId, itemKey) {
+  unpack(await supabase.from('checklist_edits').upsert(
+    { user_id: userId, item_key: itemKey, hidden: true }, { onConflict: 'user_id,item_key' }
+  ));
+}
+
+export async function deleteChecklistItem(userId, itemKey) {
+  unpack(await supabase.from('checklist_edits').delete().eq('user_id', userId).eq('item_key', itemKey));
+}
+
+export async function restoreChecklistDefaults(userId) {
+  unpack(await supabase.from('checklist_edits').delete().eq('user_id', userId).eq('hidden', true));
 }
 
 export function roomKey(info) {

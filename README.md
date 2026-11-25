@@ -20,6 +20,20 @@ npx expo start --web
 - [ ] 4. 메일 확인 후 [verified_only.sql](supabase/verified_only.sql) 실행 (기존 사용자도 인증해야 글을 쓸 수 있게 됨)
 - [ ] 5. PR을 만들어 `main`에 합치기
 
+### 준비 체크 편집
+
+- [x] [checklist_edits.sql](supabase/checklist_edits.sql) 실행 (실제 서버에 적용 완료)
+- [x] [keepalive.sql](supabase/keepalive.sql) 실행 (실제 서버에 적용 완료)
+
+### 친구 · 메시지 · 익명 대화 · 사진 (실제 서버에 적용 완료)
+
+새 프로젝트에 설정할 때는 아래 순서대로 실행합니다.
+
+- [x] 1. [chat_moderation.sql](supabase/chat_moderation.sql): 오픈채팅 신고·차단
+- [x] 2. [market_photo_handoff.sql](supabase/market_photo_handoff.sql): 중고거래 사진·인계 정보
+- [x] 3. [friends_messages.sql](supabase/friends_messages.sql): 친구추가·1:1 메시지
+- [x] 4. [checkin_chat.sql](supabase/checkin_chat.sql): 체크인 방 익명 대화
+
 ### 합치기 전에 확인할 것
 
 - [ ] 실제 계정 두 개로 물건 올리기, 중고거래 대화, 오픈채팅 시험
@@ -27,8 +41,7 @@ npx expo start --web
 
 ### 다음에 할 일
 
-- 오픈채팅 신고·차단·강퇴 (실제 사용자에게 열기 전에 권장)
-- 중고거래 물건 사진
+- 오픈채팅 강퇴
 - 새 메시지 알림 (지금은 대화를 4초마다 새로 불러옴)
 - 앱 아이콘과 시작 화면을 새 로고로 교체
 - 사용자가 늘면 인터넷 주소를 사서 메일 발송 옮기기 (Gmail은 스팸함으로 갈 수 있고 하루 발송량 제한이 있음)
@@ -71,7 +84,7 @@ npx expo start --web
 - 실제 DB에 저장되는 익명 글·댓글 (작성자와 공개 프로필을 서로 다른 스키마에 분리)
 - 전체 지역·같은 대학·도시·국가별 게시글 필터(파견 학기 조건 적용) 및 게시글 신고 기록
 - 답변한 사람만 확인할 수 있는 체크인 집계 (실제 DB 응답)
-- 친구추가·개인 메시지는 아직 서버 미연결, UI로만 준비됨. **성공했다고 표시하지 않음**
+- 친구추가·1:1 메시지 (friends_messages.sql 적용 후 동작)
 
 **중요:** 이제 서울 Supabase 프로젝트의 공개용 키가 기본 설정으로 연결되어 있으며, 환경변수가 없더라도 실제 회원가입 화면을 열 수 있습니다.
 미리보기의 사용자·게시글·체크인 통계는 가상의 샘플이며 앱을 재시작하면 상태가 사라질 수 있습니다.

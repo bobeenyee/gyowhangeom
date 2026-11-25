@@ -71,6 +71,12 @@ async function getJson(url, signal) {
   return response.json();
 }
 
+// id is the full ROR URL stored with the school, e.g. https://ror.org/035b05819.
+export async function loadUniversity(id) {
+  const item = await getJson('https://api.ror.org/v2/organizations/' + encodeURIComponent(String(id).split('/').pop()));
+  return normalizeRorOrganization(item);
+}
+
 async function findRorByName(query, signal) {
   const url = 'https://api.ror.org/v2/organizations?query='
     + encodeURIComponent(query) + '&filter=types:education';
