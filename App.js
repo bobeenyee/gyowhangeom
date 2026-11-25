@@ -901,8 +901,10 @@ function WheelPicker({ items, value, onChange, formatItem }) {
   const settleTimer = useRef(null);
   useEffect(() => () => clearTimeout(settleTimer.current), []);
   const select = (index) => {
+    clearTimeout(settleTimer.current);
     onChange(items[index]);
-    scrollRef.current?.scrollTo({ y: index * WHEEL_ITEM_HEIGHT, animated: true });
+    // On the web an animated scroll could pause halfway and be taken for a choice, so it jumps instead.
+    scrollRef.current?.scrollTo({ y: index * WHEEL_ITEM_HEIGHT, animated: Platform.OS !== 'web' });
   };
   const settle = (offset) => select(Math.max(0, Math.min(items.length - 1, Math.round(offset / WHEEL_ITEM_HEIGHT))));
   const handleEnd = (event) => settle(event.nativeEvent.contentOffset.y);
