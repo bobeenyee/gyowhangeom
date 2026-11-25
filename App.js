@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -871,7 +872,7 @@ function ExchangeRegistrationScreen({ initialValue, initialInterest, onCancel, o
         </View>
         {mode === 'going' && <><View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>파견 학기</Text>
-          <Text style={styles.helperText}>연도와 학기를 각각 위아래로 돌려 선택하세요.</Text>
+          <Text style={styles.helperText}>연도와 학기를 각각 위아래로 돌리거나 눌러서 선택하세요.</Text>
           <View style={styles.wheelRow}>
             <WheelPicker items={YEARS} value={year} onChange={setYear} formatItem={(item) => `${item}년`} />
             <WheelPicker items={TERMS} value={term} onChange={setTerm} formatItem={(item) => item} />
@@ -897,17 +898,26 @@ function WheelPicker({ items, value, onChange, formatItem }) {
   const scrollRef = useRef(null);
   const currentIndex = Math.max(0, items.findIndex((item) => item === value));
   useEffect(() => { requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: currentIndex * WHEEL_ITEM_HEIGHT, animated: false })); }, []);
-  const handleEnd = (event) => {
-    const offset = event.nativeEvent.contentOffset.y;
-    const index = Math.max(0, Math.min(items.length - 1, Math.round(offset / WHEEL_ITEM_HEIGHT)));
+  const settleTimer = useRef(null);
+  useEffect(() => () => clearTimeout(settleTimer.current), []);
+  const select = (index) => {
     onChange(items[index]);
     scrollRef.current?.scrollTo({ y: index * WHEEL_ITEM_HEIGHT, animated: true });
+  };
+  const settle = (offset) => select(Math.max(0, Math.min(items.length - 1, Math.round(offset / WHEEL_ITEM_HEIGHT))));
+  const handleEnd = (event) => settle(event.nativeEvent.contentOffset.y);
+  // Browsers never report that scrolling ended, so the web picks the value once the wheel stops moving.
+  const handleScroll = (event) => {
+    if (Platform.OS !== 'web') return;
+    const offset = event.nativeEvent.contentOffset.y;
+    clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => settle(offset), 150);
   };
   return (
     <View style={styles.wheelContainer}>
       <View pointerEvents="none" style={styles.wheelHighlight} />
-      <ScrollView ref={scrollRef} style={styles.wheel} contentContainerStyle={styles.wheelContent} showsVerticalScrollIndicator={false} snapToInterval={WHEEL_ITEM_HEIGHT} decelerationRate="fast" onMomentumScrollEnd={handleEnd} onScrollEndDrag={handleEnd}>
-        {items.map((item) => <View key={String(item)} style={styles.wheelItem}><Text style={[styles.wheelText, item === value && styles.wheelTextSelected]}>{formatItem(item)}</Text></View>)}
+      <ScrollView ref={scrollRef} style={styles.wheel} contentContainerStyle={styles.wheelContent} showsVerticalScrollIndicator={false} snapToInterval={WHEEL_ITEM_HEIGHT} decelerationRate="fast" nestedScrollEnabled scrollEventThrottle={16} onScroll={handleScroll} onMomentumScrollEnd={handleEnd} onScrollEndDrag={handleEnd}>
+        {items.map((item, index) => <TouchableOpacity key={String(item)} accessibilityRole="button" accessibilityState={{ selected: item === value }} style={styles.wheelItem} onPress={() => select(index)}><Text style={[styles.wheelText, item === value && styles.wheelTextSelected]}>{formatItem(item)}</Text></TouchableOpacity>)}
       </ScrollView>
     </View>
   );
